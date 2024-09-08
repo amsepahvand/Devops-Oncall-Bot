@@ -24,7 +24,7 @@ Open up your terminal and paste this magical command:
 bash <(curl -s https://raw.githubusercontent.com/amsepahvand/Devops-Oncall-Bot/main/setup.sh)
 ```
 
-### Step 3: Start the Bot 🎉
+### Step 3: Start the Bot 🏁
 
 Once the setup is complete, open your Telegram app and send the command `/start`. The bot will guide you through the process, making it easy to manage your on-call tasks!
 
@@ -36,6 +36,4 @@ We welcome contributions! If you have ideas or improvements, feel free to fork t
 
 This project is licensed under the MIT License. For more details, please refer to the [LICENSE](LICENSE) file.
 
-## Acknowledgments 🙌
 
-A huge shoutout to all the contributors and the open-source community! Your support and collaboration make this project possible. You rock! 🤘
