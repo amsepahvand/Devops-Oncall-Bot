@@ -22,6 +22,7 @@ Open up your terminal and paste this magical command:
 
 ```bash
 bash <(curl -s https://raw.githubusercontent.com/amsepahvand/Devops-Oncall-Bot/main/setup.sh)
+```
 
 ### Step 3: Start the Bot 🎉
 
