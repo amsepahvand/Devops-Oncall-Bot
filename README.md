@@ -21,7 +21,7 @@ Make sure you have a ubuntu server ready. Any version will do, but the newer, th
 Open up your terminal and paste this magical command:
 
 ```bash
-bash <(curl -s https://raw.githubusercontent.com/amsepahvand/Devops-Oncall-Bot/main/setup.sh)
+bash <(curl -s https://raw.githubusercontent.com/amsepahvand/Devops-Oncall-Bot/main/setup_bot.sh)
 ```
 
 ### Step 3: Start the Bot 🏁
