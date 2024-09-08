@@ -6,15 +6,15 @@ Welcome to the **DevOps On-Call Bot**! This bot is your ultimate sidekick for ma
 
 - **Super Easy Setup:** Get started with just one command!
 - **Fully Dockerized:** Say goodbye to dependency headaches.
-- **Effortless Management:** Perfect for handling on-call schedules and ticket requests.
+- **Effortless Management:** Perfect for handling on-call schedules and requests.
 
 ## Installation Guide 🚀
 
-Getting this bot up and running is as easy as pie! Follow the steps below, and you'll be ready to roll in no time.
+Getting this bot up and running is easy ! Follow the steps below, and you'll be ready to roll in no time.
 
 ### Step 1: Prepare Your Server 🖥️
 
-Make sure you have a Linux server ready. Any version will do, but the newer, the better!
+Make sure you have a ubuntu server ready. Any version will do, but the newer, the better!
 
 ### Step 2: Run the Magic Command 🪄
 
