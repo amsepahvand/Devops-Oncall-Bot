@@ -2,6 +2,5 @@ python-telegram-bot==13.7
 pytz==2024.1
 requests==2.31.0
 jdatetime==5.0.0
-six==1.16.0
 urllib3==2.2.2
 emoji==2.6.0
