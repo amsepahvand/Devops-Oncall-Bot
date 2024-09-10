@@ -49,26 +49,33 @@ else
     echo "SQLite3 is already installed."
 fi
 
+# Check if the database file exists
 if [ ! -f "bot-db.db" ]; then
     echo "Creating database and tables..."
 
     # Create the database and tables using SQLite commands
     sqlite3 bot-db.db <<EOF
-CREATE TABLE IF NOT EXISTS user_message (
+CREATE TABLE IF NOT EXISTS user_messages (
+    message_id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER,
     username TEXT,
     message TEXT,
-    persian_date TEXT
+    persian_date TEXT,
+    status TEXT,
+    created_date DATE,
+    seen_date DATE,
+    assignie TEXT
 );
 
 CREATE TABLE IF NOT EXISTS oncall_staff (
     user_id INTEGER PRIMARY KEY,
+    name TEXT,
     username TEXT
 );
 
 CREATE TABLE IF NOT EXISTS user_state (
     user_id INTEGER PRIMARY KEY,
-    state TEXT NOT NULL,
+    state TEXT,
     message TEXT
 );
 
@@ -76,8 +83,22 @@ CREATE TABLE IF NOT EXISTS bot_owner (
     user_id TEXT PRIMARY KEY
 );
 
+CREATE TABLE IF NOT EXISTS oncall_group (
+    group_id INTEGER PRIMARY KEY
+);
+
 CREATE TABLE IF NOT EXISTS bot_api_token (
     token TEXT
+);
+
+CREATE TABLE IF NOT EXISTS schedule_setting (
+    setting_value INTEGER DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS oncall_history (
+    name TEXT,
+    username TEXT,
+    date TEXT UNIQUE
 );
 EOF
 
@@ -86,7 +107,7 @@ else
     echo "Database already exists."
 fi
 
-# Function to get user input with validation
+
 get_user_input() {
     local prompt="$1"
     local input=""
@@ -108,15 +129,14 @@ get_user_input() {
     exit 1
 }
 
-# Prompt for user input
 BOT_API_TOKEN=$(get_user_input "Please enter your Telegram Bot API token: ")
 ADMIN_USER_ID=$(get_user_input "Please enter the admin Telegram user ID: ")
+ONCALL_GROUP_ID=$(get_user_input "Please enter the oncall group ID: ")
 
-# Store the API token and admin user ID in the database
 sqlite3 bot-db.db "INSERT OR REPLACE INTO bot_api_token (token) VALUES ('$BOT_API_TOKEN');"
 sqlite3 bot-db.db "INSERT OR REPLACE INTO bot_owner (user_id) VALUES ('$ADMIN_USER_ID');"
+sqlite3 bot-db.db "INSERT OR REPLACE INTO oncall_group (group_id) VALUES ('$ONCALL_GROUP_ID');"
 
-# Run Docker Compose
 sudo docker compose up -d
 
 echo "Installation complete! The bot is now running. Enjoy it ;)"
