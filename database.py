@@ -10,11 +10,16 @@ def create_db():
         conn = sqlite3.connect('bot-db.db')
         c = conn.cursor()
         c.execute('''
-            CREATE TABLE IF NOT EXISTS user_message (
+            CREATE TABLE IF NOT EXISTS user_messages (
+                message_id AUTOINCREMENT PRIMARY KEY,
                 user_id INTEGER,
                 username TEXT,
                 message TEXT,
-                persian_date TEXT
+                persian_date TEXT,
+                status  TEXT
+                created_date DATE,
+                seen_date DATE ,
+                assignie TEXT
             )
         ''')
         c.execute('''
@@ -37,6 +42,11 @@ def create_db():
             )
         ''')
         c.execute('''
+            CREATE TABLE IF NOT EXISTS oncall_group (
+                group_id INTEGER PRIMARY KEY
+            )
+        ''')
+        c.execute('''
             CREATE TABLE IF NOT EXISTS bot_api_token (
                 token TEXT
             )
@@ -50,7 +60,7 @@ def create_db():
             CREATE TABLE IF NOT EXISTS oncall_history (
                 name TEXT,
                 username TEXT,
-                date TEXT
+                date TEXT UNIQUE
             )
         ''')
         conn.commit()
@@ -79,25 +89,15 @@ def get_bot_owner_id():
     conn.close()
     return result[0] if result else None
 
-def store_message(user_id, username, message):
+def get_oncall_group_id():
     conn = sqlite3.connect('bot-db.db')
     c = conn.cursor()
-    
-    tehran_tz = pytz.timezone('Asia/Tehran')
-    tehran_time = datetime.now(tehran_tz)
-    
-    persian_date = jdatetime.datetime.fromgregorian(
-        year=tehran_time.year,
-        month=tehran_time.month,
-        day=tehran_time.day,
-        hour=tehran_time.hour,
-        minute=tehran_time.minute
-    ).strftime('%Y-%m-%d %H:%M')
-    
-    c.execute('INSERT INTO user_message (user_id, username, message, persian_date) VALUES (?, ?, ?, ?)', 
-              (user_id, username, message, persian_date))
-    conn.commit()
+    c.execute('SELECT group_id FROM oncall_group')
+    result = c.fetchone()
     conn.close()
+    return result[0] if result else None
+
+
 
 def add_oncall_staff(user_id, name, username):
     conn = sqlite3.connect('bot-db.db')
@@ -156,19 +156,132 @@ def get_schedule_setting():
     return result[0] if result else None  
 
 def add_oncall_history(name, username, date):
+    reindex_oncall_history()
     conn = sqlite3.connect('bot-db.db')
     c = conn.cursor()
-    c.execute('INSERT INTO oncall_history (name, username, date) VALUES (?, ?, ?)', (name, username, date))
+
+    c.execute('''
+        UPDATE oncall_history 
+        SET name = ?, username = ? 
+        WHERE date = ?
+    ''', (name, username, date))
+    if c.rowcount == 0:
+        c.execute('INSERT INTO oncall_history (name, username, date) VALUES (?, ?, ?)', (name, username, date))
+    
     conn.commit()
     conn.close()
 
-def get_oncall_history():
+def get_oncall_history_in_range(start_date, end_date):
     conn = sqlite3.connect('bot-db.db')
     c = conn.cursor()
-    c.execute('SELECT name, username, date FROM oncall_history')
+    c.execute('''
+        SELECT name, username, date 
+        FROM oncall_history 
+        WHERE date BETWEEN ? AND ?
+        ORDER BY date
+    ''', (start_date, end_date))
+    
     history = c.fetchall()
     conn.close()
     return history
+
+def check_date_exists(date):
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+    c.execute('SELECT COUNT(*) FROM oncall_history WHERE date = ?', (date,))
+    exists = c.fetchone()[0] > 0
+    conn.close()
+    return exists
+
+def reindex_oncall_history():
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS new_oncall_history (
+            name TEXT,
+            username TEXT,
+            date TEXT UNIQUE
+        )
+    ''')
+
+    c.execute('''
+        INSERT INTO new_oncall_history (name, username, date)
+        SELECT name, username, date FROM oncall_history
+        ORDER BY date
+    ''')
+
+    c.execute('DROP TABLE oncall_history')
+    c.execute('ALTER TABLE new_oncall_history RENAME TO oncall_history')
+    
+    conn.commit()
+    conn.close()
+
+
+def mark_message_as_seen(message_id):
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+    
+    seen_date = datetime.now(pytz.timezone('Asia/Tehran')).strftime('%Y-%m-%d %H:%M:%S')
+    c.execute('UPDATE user_messages SET seen_date = ? WHERE message_id = ?', (seen_date, message_id))
+    
+    if c.rowcount == 0:
+        logging.warning(f"No message found with message_id: {message_id}")
+    
+    conn.commit()
+    conn.close()
+
+
+def store_message(user_id, username, message, assignie=None, status='not reported'):
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+    
+    tehran_tz = pytz.timezone('Asia/Tehran')
+    tehran_time = datetime.now(tehran_tz)
+    
+    persian_date = jdatetime.datetime.fromgregorian(
+        year=tehran_time.year,
+        month=tehran_time.month,
+        day=tehran_time.day,
+        hour=tehran_time.hour,
+        minute=tehran_time.minute
+    ).strftime('%Y-%m-%d %H:%M')
+    
+    created_date = tehran_time.strftime('%Y-%m-%d %H:%M:%S')  # Store in datetime format
+
+    c.execute('INSERT INTO user_messages (user_id, username, message, persian_date, created_date, assignie, status) VALUES (?, ?, ?, ?, ?, ?, ?)', 
+              (user_id, username, message, persian_date, created_date, assignie, status))
+
+    message_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    
+    return message_id
+
+def is_oncall_staff(user_id):
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+    c.execute('SELECT COUNT(*) FROM oncall_staff WHERE user_id = ?', (user_id,))
+    exists = c.fetchone()[0] > 0
+    conn.close()
+    return exists
+
+def get_user_tickets(user_id):
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+    c.execute('SELECT message_id, message, persian_date, assignie FROM user_messages WHERE user_id = ? ORDER BY created_date DESC LIMIT 10', (user_id,))
+    tickets = c.fetchall()
+    conn.close()
+    return tickets
+
+def get_ticket_details(message_id):
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+    c.execute('SELECT message, persian_date, assignie FROM user_messages WHERE message_id = ?', (message_id,))
+    ticket = c.fetchone()
+    conn.close()
+    return ticket
+
 
 create_db()
 
