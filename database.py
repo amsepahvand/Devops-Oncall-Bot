@@ -142,7 +142,14 @@ def get_user_state(user_id):
 def set_schedule_setting(setting_value):
     conn = sqlite3.connect('bot-db.db')
     c = conn.cursor()
-    c.execute('UPDATE schedule_setting SET setting_value = ? WHERE setting_value IS NOT NULL ', (setting_value,))
+    c.execute('SELECT COUNT(*) FROM schedule_setting')
+    row_count = c.fetchone()[0]
+    
+    if row_count == 0:
+        c.execute('INSERT INTO schedule_setting (setting_value) VALUES (?)', (setting_value,))
+    else:
+        c.execute('UPDATE schedule_setting SET setting_value = ? WHERE setting_value IS NOT NULL', (setting_value,))
+    
     conn.commit()
     conn.close()
 
@@ -284,6 +291,3 @@ def get_ticket_details(message_id):
 
 
 create_db()
-
-
-#        logging.info(f"{oncall_userid} - 22222222222222222222222222222222222") 
