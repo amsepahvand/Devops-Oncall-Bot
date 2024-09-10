@@ -113,9 +113,10 @@ def see_my_requests(query):
         # Show the first 30 characters of the message
         short_message = message[:30] + "..." if len(message) > 30 else message
         keyboard.append([InlineKeyboardButton(short_message, callback_data=f'show_ticket_{message_id}')])
+    keyboard.append([InlineKeyboardButton("بازگشت به منوی اصلی", callback_data='main_menu')])
 
     reply_markup = InlineKeyboardMarkup(keyboard)
-    query.message.reply_text("📋 لیست تیکت‌های شما:", reply_markup=reply_markup)
+    query.edit_message_text("📋 لیست تیکت‌های شما\n\n⬇ اینجا میتونی ده تیکت آخر خودت رو ببینی ⬇\n.", reply_markup=reply_markup)
 
 
 def mark_message_as_seen_in_db(query):
