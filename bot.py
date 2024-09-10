@@ -66,10 +66,10 @@ def button_handler(update, context) :
     elif query.data == 'generate_schedule':
         generate_schedule_list_start_date(query)
     elif query.data.startswith('start_schedule_'):
-        generate_oncall_schedule(query)
+        generate_oncall_schedule(query , context)
     elif query.data.startswith('rewrite_list'):
         update_user_state(user_id, 'approve_overwrite')
-        generate_oncall_schedule(query)
+        generate_oncall_schedule(query , context)
     elif query.data == ('send_schedule_list_to_group'):
         send_schedule_list_to_group(query, context)
     elif query.data.startswith('message_has_been_seen_'):
@@ -129,22 +129,28 @@ def send_schedule_list_to_group(query, context):
     start_date = datetime.now(tehran_tz)
     end_date = start_date + timedelta(days=30)
 
-    # Convert Gregorian dates to Jalali format for querying
     jalali_start_date = jdatetime.datetime.fromgregorian(
         year=start_date.year,
         month=start_date.month,
         day=start_date.day
-    ).strftime('%Y/%m/%d')  # Format as YYYY/MM/DD
+    ).strftime('%Y/%m/%d')
 
     jalali_end_date = jdatetime.datetime.fromgregorian(
         year=end_date.year,
         month=end_date.month,
         day=end_date.day
-    ).strftime('%Y/%m/%d')  # Format as YYYY/MM/DD
+    ).strftime('%Y/%m/%d')
 
-    # Get on-call history within the specified date range
     oncall_history = get_oncall_history_in_range(jalali_start_date, jalali_end_date)
     
+    if not oncall_history:  # Check if the on-call history is empty
+        buttons = [
+            [InlineKeyboardButton("ساخت لیست آنکالی", callback_data="schedule_setting")]
+        ]
+        reply_markup = InlineKeyboardMarkup(buttons)
+        query.edit_message_text(text="هنوز  لیست آنکالی ساخته نشده نشده", reply_markup=reply_markup)
+        return  # Exit the function if the list is empty
+
     oncall_count = {}
     schedule_message = ""
     
@@ -153,12 +159,11 @@ def send_schedule_list_to_group(query, context):
             oncall_count[date] = []
         oncall_count[date].append((name, username))
     
-    # Add line numbers to the schedule message
     line_number = 1
     for date, persons in oncall_count.items():
         names_str = ", ".join([name for name, _ in persons])
         schedule_message += f"{line_number}. {date}: {names_str}\n"
-        line_number += 1  # Increment line number
+        line_number += 1  
     
     unique_usernames = set()
     for persons in oncall_count.values():
@@ -166,19 +171,28 @@ def send_schedule_list_to_group(query, context):
     
     unique_usernames_str = "\n".join([f"@{username}" for username in unique_usernames])
     
-    # Convert Jalali dates for display
-    jalali_start_date_display = jalali_start_date  # Already in the correct format
-    jalali_end_date_display = jalali_end_date      # Already in the correct format
+    jalali_start_date_display = jalali_start_date
+    jalali_end_date_display = jalali_end_date 
     
     final_message = f"📅 لیست آنکالی برای بازه {jalali_start_date_display} تا {jalali_end_date_display}:\n\n{schedule_message}\n\n" \
                     f"🔹 جهت اطلاع:\n{unique_usernames_str}"
     
-    context.bot.send_message(chat_id=oncall_group_id, text=final_message, reply_markup=None)
+    context.bot.send_message(chat_id=str(oncall_group_id), text=final_message, reply_markup=None)
     buttons = [
         [InlineKeyboardButton("🔙 بازگشت به پنل مدیریت", callback_data="admin_panel")]
     ]
     reply_markup = InlineKeyboardMarkup(buttons)
     query.edit_message_text(text="✅ لیست به گروه آنکال ارسال شد.", reply_markup=reply_markup)
+
+def alert_user_about_exist_list(query, date):
+    start_schedule_date = query.data.split('_')[2]
+    buttons = [
+        [InlineKeyboardButton("🔄 بازنویسی کن", callback_data=f"rewrite_list_{start_schedule_date}")],
+        [InlineKeyboardButton("🔙 بازگشت به پنل مدیریت", callback_data="admin_panel")]
+    ]
+    reply_markup = InlineKeyboardMarkup(buttons)
+    query.edit_message_text(text=f"❗ برای تاریخ‌های مورد نظر رکوردهایی در دیتابیس موجود است. آیا بازنویسی شود؟", reply_markup=reply_markup)
+
 
 
 def alert_user_about_exist_list(query, date):
@@ -191,8 +205,10 @@ def alert_user_about_exist_list(query, date):
     query.edit_message_text(text=f"❗ برای تاریخ‌های مورد نظر رکوردهایی در دیتابیس موجود است. آیا بازنویسی شود؟", reply_markup=reply_markup)
 
 
-def generate_oncall_schedule(query):
+def generate_oncall_schedule(query , context):
+
     start_date = query.data.split('_')[2]
+
     oncall_persons = get_oncall_list()
     period_setting = get_schedule_setting()
     user_id = get_user_id(query)
@@ -200,6 +216,13 @@ def generate_oncall_schedule(query):
 
     if not oncall_persons or period_setting is None:
         logging.warning("No on-call persons or schedule setting found.")
+        buttons = [
+            [InlineKeyboardButton("مشاهده لیست آنکالی", callback_data="show_oncall_list")]
+        ]
+        reply_markup = InlineKeyboardMarkup(buttons)
+        query.edit_message_text(text="هنوز فردی به لیست آنکالی اضافه نشده", reply_markup=reply_markup)
+
+        
         return
 
     tehran_tz = pytz.timezone('Asia/Tehran')
@@ -209,6 +232,8 @@ def generate_oncall_schedule(query):
         current_date = datetime.now(tehran_tz) + timedelta(days=1)  
 
     existing_dates = []
+
+    
     for day in range(30):
         future_date = current_date + timedelta(days=day)
         jalali_date = jdatetime.datetime.fromgregorian(
@@ -219,12 +244,13 @@ def generate_oncall_schedule(query):
 
         if check_date_exists(jalali_date):
             existing_dates.append(jalali_date)
-
+     
     if user_state != 'approve_overwrite':
         if existing_dates:
             alert_user_about_exist_list(query, existing_dates)
             return
-    else:
+        else:
+            pass
         for day in range(30):
             future_date = current_date + timedelta(days=day)
             jalali_date = jdatetime.datetime.fromgregorian(
@@ -232,7 +258,6 @@ def generate_oncall_schedule(query):
                 month=future_date.month,
                 day=future_date.day
             ).strftime('%Y/%m/%d')
-            
             person_index = (day // period_setting) % len(oncall_persons)
             oncall_person = oncall_persons[person_index]
             
@@ -252,7 +277,8 @@ def generate_oncall_schedule(query):
 def generate_schedule_list_start_date(query):
     buttons = [
         [InlineKeyboardButton("📅 تاریخ شروع لیست از امروز", callback_data="start_schedule_today")],
-        [InlineKeyboardButton("📅 تاریخ شروع لیست از فردا", callback_data="start_schedule_tomorrow")]
+        [InlineKeyboardButton("📅 تاریخ شروع لیست از فردا", callback_data="start_schedule_tomorrow")],
+        [InlineKeyboardButton("بازگشت به منو قبلی", callback_data="schedule_setting")]
     ]
     reply_markup = InlineKeyboardMarkup(buttons)
     query.edit_message_text(text="لطفاً انتخاب کنید:", reply_markup=reply_markup)
@@ -350,7 +376,9 @@ def handle_forwarded_message(update: Update, context: CallbackContext) -> None:
     state = get_user_state(user_id)
 
     if state == 'add_new_oncall_username':
+
         if update.message.forward_from:
+        
             forwarded_user_id = update.message.forward_from.id
             forwarded_first_name = update.message.forward_from.first_name
             forwarded_username = update.message.forward_from.username if update.message.forward_from.username else "N/A"
@@ -430,7 +458,7 @@ def handle_message(update: Update, context: CallbackContext) -> None:
             keyboard = [[InlineKeyboardButton("👁️ مشاهده نشده ⏱", callback_data=f"message_has_been_seen_{message_id}")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
 
-            context.bot.send_message(chat_id=oncall_group_id, text=f"📩 تیکت جدید\n\n👤 کاربر: {username}\n\n🗓️ تاریخ: {persian_now}\n\n💬 شرح پیام: \n{message} \n\n🔔 جهت اطلاع  \n\n{mention}", reply_markup=reply_markup)
+            context.bot.send_message(chat_id=str(oncall_group_id), text=f"📩 تیکت جدید\n\n👤 کاربر: {username}\n\n🗓️ تاریخ: {persian_now}\n\n💬 شرح پیام: \n{message} \n\n🔔 جهت اطلاع  \n\n{mention}", reply_markup=reply_markup)
 
             update.message.reply_text(f'✅ تیکت شما با موفقیت ثبت شد و {mention} مسئول رسیدگی به آن می‌باشد.\nدر سریع‌ترین زمان ممکن با شما ارتباط برقرار می‌کنند 🎉')
 
@@ -477,8 +505,9 @@ def main():
 
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CallbackQueryHandler(button_handler))
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
     dp.add_handler(MessageHandler(Filters.forwarded, handle_forwarded_message))
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+
 
     updater.start_polling()
     updater.idle()
