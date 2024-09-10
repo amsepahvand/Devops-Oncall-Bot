@@ -52,7 +52,7 @@ def button_handler(update, context) :
     elif query.data == 'show_oncall_list':
         show_oncall_list(query)
     elif query.data == 'add_new_oncall':
-            add_oncall(query)
+        add_oncall(query)
     elif query.data == 'delete_oncalls':
         delete_oncalls(query , update)
     elif query.data.startswith('delete_oncall_'):
@@ -79,6 +79,8 @@ def button_handler(update, context) :
     elif query.data.startswith('show_ticket_'):
         message_id = int(query.data.split('_')[2])
         show_ticket_details(query, message_id)
+    elif query.data == ('restart_bot'):
+        start(update, context)
     
 
 
@@ -148,7 +150,7 @@ def send_schedule_list_to_group(query, context):
             [InlineKeyboardButton("ساخت لیست آنکالی", callback_data="schedule_setting")]
         ]
         reply_markup = InlineKeyboardMarkup(buttons)
-        query.edit_message_text(text="هنوز  لیست آنکالی ساخته نشده نشده", reply_markup=reply_markup)
+        query.edit_message_text(text="هنوز  لیست آنکالی ساخته نشده", reply_markup=reply_markup)
         return  # Exit the function if the list is empty
 
     oncall_count = {}
@@ -214,15 +216,21 @@ def generate_oncall_schedule(query , context):
     user_id = get_user_id(query)
     user_state = get_user_state(user_id)
 
-    if not oncall_persons or period_setting is None:
+    if not oncall_persons:
         logging.warning("No on-call persons or schedule setting found.")
         buttons = [
             [InlineKeyboardButton("مشاهده لیست آنکالی", callback_data="show_oncall_list")]
         ]
         reply_markup = InlineKeyboardMarkup(buttons)
         query.edit_message_text(text="هنوز فردی به لیست آنکالی اضافه نشده", reply_markup=reply_markup)
+        return
 
-        
+    elif period_setting is None:
+        buttons = [
+            [InlineKeyboardButton(" تنظیم زمانبندی آنکالی", callback_data="oncall_periods")]
+        ]
+        reply_markup = InlineKeyboardMarkup(buttons)
+        query.edit_message_text(text="هنوز زمانبندی آنکالی تعیین نشده", reply_markup=reply_markup)
         return
 
     tehran_tz = pytz.timezone('Asia/Tehran')
@@ -251,27 +259,27 @@ def generate_oncall_schedule(query , context):
             return
         else:
             pass
-        for day in range(30):
-            future_date = current_date + timedelta(days=day)
-            jalali_date = jdatetime.datetime.fromgregorian(
-                year=future_date.year,
-                month=future_date.month,
-                day=future_date.day
-            ).strftime('%Y/%m/%d')
-            person_index = (day // period_setting) % len(oncall_persons)
-            oncall_person = oncall_persons[person_index]
-            
-            add_oncall_history(oncall_person[1], oncall_person[2], jalali_date)
-            user_id = get_user_id(query)
-            update_user_state(user_id, 'None')
+    for day in range(30):
+        future_date = current_date + timedelta(days=day)
+        jalali_date = jdatetime.datetime.fromgregorian(
+            year=future_date.year,
+            month=future_date.month,
+            day=future_date.day
+        ).strftime('%Y/%m/%d')
+        person_index = (day // period_setting) % len(oncall_persons)
+        oncall_person = oncall_persons[person_index]
+        
+        add_oncall_history(oncall_person[1], oncall_person[2], jalali_date)
+        user_id = get_user_id(query)
+        update_user_state(user_id, 'None')
 
-        buttons = [
-            [InlineKeyboardButton("📤 ارسال لیست به گروه آنکال", callback_data="send_schedule_list_to_group")],
-            [InlineKeyboardButton("🔙 بازگشت به پنل مدیریت", callback_data="admin_panel")]
-        ]
-        reply_markup = InlineKeyboardMarkup(buttons)
+    buttons = [
+        [InlineKeyboardButton("📤 ارسال لیست به گروه آنکال", callback_data="send_schedule_list_to_group")],
+        [InlineKeyboardButton("🔙 بازگشت به پنل مدیریت", callback_data="admin_panel")]
+    ]
+    reply_markup = InlineKeyboardMarkup(buttons)
 
-        query.edit_message_text(text="✅ برنامه آنکالی با موفقیت ایجاد شد.", reply_markup=reply_markup)
+    query.edit_message_text(text="✅ برنامه آنکالی با موفقیت ایجاد شد.", reply_markup=reply_markup)
 
 
 def generate_schedule_list_start_date(query):
@@ -429,7 +437,6 @@ def show_admin_panel(query):
     reply_markup = InlineKeyboardMarkup(admin_keyboard)
     query.edit_message_text(text='⚙️ پنل ادمین ربات، اینجا می‌توانید نفرات را ببینید یا اضافه/حذف کنید و یا اینکه لیست آنکال یک ماه آینده را بسازید:', parse_mode="HTML", reply_markup=reply_markup)
 
-
 def handle_message(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
     username = update.message.from_user.username if update.message.from_user.username else "N/A"
@@ -460,7 +467,23 @@ def handle_message(update: Update, context: CallbackContext) -> None:
 
             context.bot.send_message(chat_id=str(oncall_group_id), text=f"📩 تیکت جدید\n\n👤 کاربر: {username}\n\n🗓️ تاریخ: {persian_now}\n\n💬 شرح پیام: \n{message} \n\n🔔 جهت اطلاع  \n\n{mention}", reply_markup=reply_markup)
 
-            update.message.reply_text(f'✅ تیکت شما با موفقیت ثبت شد و {mention} مسئول رسیدگی به آن می‌باشد.\nدر سریع‌ترین زمان ممکن با شما ارتباط برقرار می‌کنند 🎉')
+            # Create a new keyboard with the restart button
+            restart_keyboard = [
+                [InlineKeyboardButton("🔄 شروع مجدد", callback_data="restart_bot")]
+            ]
+            restart_reply_markup = InlineKeyboardMarkup(restart_keyboard)
+
+            update.message.reply_text(
+                f'✅ تیکت شما با موفقیت ثبت شد و {mention} مسئول رسیدگی به آن می‌باشد.\nدر سریع‌ترین زمان ممکن با شما ارتباط برقرار می‌کنند 🎉',
+                reply_markup=restart_reply_markup
+            )
+        else:
+            context.bot.send_message(chat_id=str(oncall_group_id), text=f"تنظیمات ربات اعم از نفرات آنکال یا زمانبندی آنکال به درستی اعمال نشده ، فراموش نکنید بعد از وارد کردن این موارد باید یک لیست هم بسازید", reply_markup=None)
+            restart_keyboard = [
+                [InlineKeyboardButton("🔄 شروع مجدد", callback_data="restart_bot")]]
+            restart_reply_markup = InlineKeyboardMarkup(restart_keyboard)
+            update.message.reply_text('در حال حاضر ربات آماده به کار نیست لطفا با پشتیبانی تماس بگیرید',reply_markup=restart_reply_markup)
+
 
 
 def back_to_start(update: Update, context: CallbackContext) -> None:
