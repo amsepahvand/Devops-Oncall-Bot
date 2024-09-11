@@ -64,7 +64,16 @@ CREATE TABLE IF NOT EXISTS user_messages (
     status TEXT,
     created_date DATE,
     seen_date DATE,
-    assignie TEXT
+    assignie TEXT,
+    jira_issue_key TEXT
+);
+CREATE TABLE IF NOT EXISTS jira_ticketing_data (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    jira_base_url TEXT,
+    username TEXT,
+    password TEXT ,
+    send_to_jira INTEGER DEFAULT 0,
+    project_key TEXT
 );
 
 CREATE TABLE IF NOT EXISTS oncall_staff (

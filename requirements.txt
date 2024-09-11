@@ -4,3 +4,4 @@ requests==2.31.0
 jdatetime==5.0.0
 urllib3==2.2.2
 emoji==2.6.0
+jira==3.8.0

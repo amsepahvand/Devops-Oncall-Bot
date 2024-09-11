@@ -1,16 +1,17 @@
 import sys
 import logging
 from datetime import datetime, timedelta
-
 import emoji
 import pytz
 import jdatetime
+from jira_functions import create_jira_issue, create_test_issue
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, CallbackQueryHandler
 from database import (
     create_db, store_message, get_oncall_list, get_oncall_group_id, get_user_tickets, get_ticket_details, is_oncall_staff, remove_oncall_staff,
     mark_message_as_seen, update_user_state, get_user_state, get_api_token, add_oncall_staff, get_bot_owner_id, set_schedule_setting, get_schedule_setting, 
-    add_oncall_history, check_date_exists, get_oncall_history_in_range
+    add_oncall_history, check_date_exists, get_oncall_history_in_range, get_jira_credentials, set_jira_status, set_jira_base_url, set_jira_username,
+    set_jira_password, set_jira_project_key
 )
 
 
@@ -81,6 +82,147 @@ def button_handler(update, context) :
         show_ticket_details(query, message_id)
     elif query.data == ('restart_bot'):
         start(update, context)
+    elif query.data == ('jira_setting'):
+        show_jira_setting(query)
+    elif query.data.startswith('change_jira_status_to'):
+        change_jira_status(query)
+    elif  query.data == ('change_jira_credential'):
+        change_jira_credential(query)
+    elif query.data == ('change_jira_base_url'):
+        set_or_change_jira_base_url(query)
+    elif query.data == ('change_jira_username'):
+        set_or_change_jira_username(query)
+    elif query.data == ('change_jira_password'):
+        set_or_change_jira_password(query)
+    elif query.data == ('change_jira_project_key'):
+        set_or_change_jira_project_key(query)
+
+
+
+
+
+def set_or_change_jira_base_url(query):
+    user_id = get_user_id(query)
+    state = get_user_state(user_id)
+    
+    if state != "import_jira_data":
+        update_user_state(user_id, 'change_jira_base_url')
+    else:
+        update_user_state(user_id, 'import_jira_base_url')
+    query.message.reply_text('لطفا آدرس BASE URL جیرا را وارد کنید ، فرمت درست به این شکل است\n\n https://jira.example.com \n🔸')
+
+def set_or_change_jira_username(update):
+    user_id = get_user_id(update)
+    state = get_user_state(user_id)
+    if state != "import_jira_base_url":
+        update_user_state(user_id, 'change_jira_username')
+    else:
+        update_user_state(user_id, 'import_jira_username')
+    update.message.reply_text('لطفا نام کاربری جدید را وارد کنید توجه کنید که این نام کاربری باید بتواند به ایشو های پروژه مورد نظر دسترسی داشته یا ایشو جدید ایجاد کند')
+
+def set_or_change_jira_password(update):
+    user_id = get_user_id(update)
+    state = get_user_state(user_id)
+    if state != "import_jira_username":
+        update_user_state(user_id, 'change_jira_password')
+    else:
+        update_user_state(user_id, 'import_jira_password')
+    update.message.reply_text('لطفا پسورد اکانت جیرا را وارد کنید')
+
+def set_or_change_jira_project_key(update):
+    user_id = get_user_id(update)
+    state = get_user_state(user_id)
+    if state != "import_jira_password":
+        update_user_state(user_id, 'change_jira_project_key')
+    else:
+        update_user_state(user_id, 'import_jira_project_key')
+    update.message.reply_text('لطفا PROJECT KEY  را وارد کنید ، PROJECT KEY رو میتونید از داخل URL پروژه دربیاریددر واقع همون کلمه قبل از شماره ایشو های پروژه جیرا است')
+
+
+
+
+def change_jira_credential(query):
+    user_id = get_user_id(query)
+    update_user_state(user_id, 'change_jira_credential')
+    jira_base_url, username, password, send_to_jira, project_key = get_jira_credentials()
+    keyboard = [
+        [InlineKeyboardButton("تغییر BASE URL 🌐", callback_data='change_jira_base_url')],
+        [InlineKeyboardButton("تغییر USERNAME کاربر جیرا 👤", callback_data="change_jira_username")],
+        [InlineKeyboardButton("تغییر کلمه عبور فعلی 🔑", callback_data='change_jira_password')],
+        [InlineKeyboardButton("تغییر PROJECT KEY 📂", callback_data="change_jira_project_key")],
+        [InlineKeyboardButton("بازگشت به تنظیمات جیرا 🔙", callback_data="jira_setting")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    query.edit_message_text(f" هرکدوم از مشخصات رو میخوای عوض کنی انتخاب کن\n BASE URL: {jira_base_url}\nUSERNAME : {username}\nPASSWORD : ░ ░ ░ ░ ░ \nPROJECT KEY : {project_key}🔸", reply_markup=reply_markup)
+
+
+
+
+def change_jira_status(query):
+    new_status = int(query.data.split('_')[-1])
+    set_jira_status(new_status)
+    keyboard = [
+        [InlineKeyboardButton("بازگشت به تنظیمات جیرا 🔙", callback_data='jira_setting')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    if new_status == 1:
+        query.edit_message_text("وضعیت تغییر کرد: تیکت‌ها به جیرا ارسال خواهند شد ✅.", reply_markup=reply_markup)
+    else:
+        query.edit_message_text("وضعیت تغییر کرد: تیکت‌ها به جیرا ارسال نخواهند شد ⛔.", reply_markup=reply_markup)
+
+
+def show_jira_setting(query):
+    jira_data = get_jira_credentials()
+    user_id = get_user_id(query)
+    
+    if jira_data:
+        jira_base_url, username, password, send_to_jira, project_key = jira_data
+        
+        if all([jira_base_url, username, password, project_key]):
+            if send_to_jira == 1:
+                keyboard = [
+                    [InlineKeyboardButton("تغییر وضعیت به عدم ساخت تیکت در جیرا", callback_data='change_jira_status_to_0')],
+                    [InlineKeyboardButton("تغییر مشخصات جیرا 🔧", callback_data="change_jira_credential")],
+                    [InlineKeyboardButton("بازگشت به منو قبلی", callback_data='admin_panel')]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                query.edit_message_text("وضعیت فعلی: تیکت‌ها به جیرا ارسال می‌شوند ✅.", reply_markup=reply_markup)
+            else:
+                keyboard = [
+                    [InlineKeyboardButton("تغییر وضعیت به ساخت تیکت در جیرا", callback_data='change_jira_status_to_1')],
+                    [InlineKeyboardButton("تغییر مشخصات جیرا 🔧", callback_data="change_jira_credential")],
+                    [InlineKeyboardButton("بازگشت به منو قبلی 🔙", callback_data='admin_panel')]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                query.edit_message_text("وضعیت فعلی: تیکت‌ها به جیرا ارسال نمی‌شوند ⛔.", reply_markup=reply_markup)
+        else:
+            update_user_state(user_id,'import_jira_data')
+            keyboard = [
+                [InlineKeyboardButton("وارد کردن BASE URL 🌐", callback_data='change_jira_base_url')],
+                [InlineKeyboardButton("بازگشت به منوی قبلی 🔙", callback_data='admin_panel')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            query.edit_message_text("برای استفاده از این قسمت ابتدا باید مشخصات اولیه جیرا را تکمیل کنید.", reply_markup=reply_markup)
+    else:
+        update_user_state(user_id,'import_jira_data')
+        keyboard = [
+            [InlineKeyboardButton("وارد کردن BASE URL 🌐", callback_data='change_jira_base_url')],
+            [InlineKeyboardButton("بازگشت به منوی قبلی 🔙", callback_data='admin_panel')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        query.edit_message_text("برای استفاده از این قسمت ابتدا باید مشخصات اولیه جیرا را تکمیل کنید.", reply_markup=reply_markup)
+
+
+
+
+
+
+
+
+
+
+
+
     
 
 
@@ -116,7 +258,7 @@ def see_my_requests(query):
     keyboard.append([InlineKeyboardButton("بازگشت به منوی اصلی", callback_data='main_menu')])
 
     reply_markup = InlineKeyboardMarkup(keyboard)
-    query.edit_message_text("📋 لیست تیکت‌های شما\n\n⬇ اینجا میتونی ده تیکت آخر خودت رو ببینی ⬇\n.", reply_markup=reply_markup)
+    query.edit_message_text("📋 لیست تیکت‌های شما\n\n⬇ اینجا میتونی ده تیکت آخر خودت رو ببینی ⬇\n🔸", reply_markup=reply_markup)
 
 
 def mark_message_as_seen_in_db(query):
@@ -433,15 +575,22 @@ def show_admin_panel(query):
     admin_keyboard = [
         [InlineKeyboardButton("➖ مشاهده لیست نفرات", callback_data='show_oncall_list')],
         [InlineKeyboardButton("📋 تنظیمات و زمانبندی OnCall", callback_data='schedule_setting')],
+        [InlineKeyboardButton("🌀 تنظیمات ارسال تیکت به جیرا", callback_data='jira_setting')],
         [InlineKeyboardButton("🔙 بازگشت به منو اصلی", callback_data='main_menu')]
     ]
     reply_markup = InlineKeyboardMarkup(admin_keyboard)
     query.edit_message_text(text='⚙️ پنل ادمین ربات، اینجا می‌توانید نفرات را ببینید یا اضافه/حذف کنید و یا اینکه لیست آنکال یک ماه آینده را بسازید:', parse_mode="HTML", reply_markup=reply_markup)
 
+
+
+
+
+
 def handle_message(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
     username = update.message.from_user.username if update.message.from_user.username else "N/A"
     message = update.message.text
+    
 
     state = get_user_state(user_id)
 
@@ -462,13 +611,21 @@ def handle_message(update: Update, context: CallbackContext) -> None:
             oncall_user_id, oncall_name, oncall_username = oncall_staff[0]
             mention = f"@{oncall_username}"
 
-            message_id = store_message(user_id, username, message, assignie=oncall_username, status='not reported')
+            jira_data = get_jira_credentials()
+            send_to_jira = jira_data[3] if jira_data else 1  # Default to 1 if no data
+
+            jira_issue_key = None
+            if send_to_jira == 1:
+                summary = message[:30] 
+                jira_issue_key = create_jira_issue(summary, message) 
+
+            message_id = store_message(user_id, username, message, assignie=oncall_username, status='not reported', jira_issue_key=jira_issue_key)
+
             keyboard = [[InlineKeyboardButton("👁️ مشاهده نشده ⏱", callback_data=f"message_has_been_seen_{message_id}")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
 
-            context.bot.send_message(chat_id=str(oncall_group_id), text=f"📩 تیکت جدید\n\n👤 کاربر: {username}\n\n🗓️ تاریخ: {persian_now}\n\n💬 شرح پیام: \n{message} \n\n🔔 جهت اطلاع  \n\n{mention}", reply_markup=reply_markup)
+            context.bot.send_message(chat_id=str(oncall_group_id), text=f"📩 تیکت جدید\n\n👤 کاربر: {username}\n\n🗓️ تاریخ: {persian_now}\n\n💬 شرح پیام: \n{message} \n\n🔔 جهت اطلاع  \n\nنفر آنکال : {mention}\n🔸", reply_markup=reply_markup)
 
-            # Create a new keyboard with the restart button
             restart_keyboard = [
                 [InlineKeyboardButton("🔄 شروع مجدد", callback_data="restart_bot")]
             ]
@@ -484,6 +641,73 @@ def handle_message(update: Update, context: CallbackContext) -> None:
                 [InlineKeyboardButton("🔄 شروع مجدد", callback_data="restart_bot")]]
             restart_reply_markup = InlineKeyboardMarkup(restart_keyboard)
             update.message.reply_text('در حال حاضر ربات آماده به کار نیست لطفا با پشتیبانی تماس بگیرید',reply_markup=restart_reply_markup)
+    elif state == 'change_jira_base_url':
+        set_jira_base_url(message)
+        keyboard = [
+            [InlineKeyboardButton("بازگشت به منو مقداردهی جیرا", callback_data="change_jira_credential")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        update.message.reply_text(f'New Base URL : {message}',reply_markup=reply_markup)
+    elif state == 'change_jira_username':
+        set_jira_username(message)
+        keyboard = [
+            [InlineKeyboardButton("بازگشت به منو مقداردهی جیرا", callback_data="change_jira_credential")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        update.message.reply_text(f'New USERNAME : {message}',reply_markup=reply_markup)
+    elif state == 'change_jira_password':
+        set_jira_password(message)
+        keyboard = [
+            [InlineKeyboardButton("بازگشت به منو مقداردهی جیرا", callback_data="change_jira_credential")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        update.message.reply_text(f'Your Password Was Changed',reply_markup=reply_markup)
+    elif state == 'change_jira_project_key':
+        set_jira_project_key(message)
+        keyboard = [
+            [InlineKeyboardButton("بازگشت به منو مقداردهی جیرا", callback_data="change_jira_credential")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        update.message.reply_text(f'New Project Key : {message}',reply_markup=reply_markup)
+
+
+    elif state == 'import_jira_base_url':
+        set_jira_base_url(message)
+        update.message.reply_text(f'Base URL  :  {message}',reply_markup=None)
+        set_or_change_jira_username(update)
+    elif state == 'import_jira_username':
+        set_jira_username(message)
+        update.message.reply_text(f'Username  :  {message}',reply_markup=None)
+        set_or_change_jira_password(update)
+    elif state == 'import_jira_password':
+        set_jira_password(message)
+        update.message.reply_text(f'Password  : ░ ░ ░ ░ ░ ',reply_markup=None)
+        set_or_change_jira_project_key(update)
+    elif state == 'import_jira_project_key':
+        set_jira_project_key(message)
+        update.message.reply_text(f'Base URL  :  {message}',reply_markup=None)
+
+        connection_status = create_test_issue()
+        if connection_status == 'error':
+            keyboard = [
+                [InlineKeyboardButton("بازگشت به منو مشخصات جیرا", callback_data="change_jira_credential")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            update.message.reply_text('ارتباط با جیرا برقرار نشد لطفا مشخصات را بررسی کنید  و یا از کارکرد جیرا با این مشخصات اطمینان حاصل کنید',reply_markup=reply_markup)
+        else:
+            set_jira_status(1)
+            keyboard = [
+                [InlineKeyboardButton("بازگشت به منو مشخصات جیرا", callback_data="change_jira_credential")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            update.message.reply_text('مشخصات جیرا با موفقیت ثبت و وضعیت ارسال بطور خودکار فعال شد',reply_markup=reply_markup)
+
+    
+       
+    
+        
+        
+
+
+
+
+
+
+
 
 
 

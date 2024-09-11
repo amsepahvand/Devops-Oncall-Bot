@@ -19,7 +19,18 @@ def create_db():
                 status  TEXT
                 created_date DATE,
                 seen_date DATE ,
-                assignie TEXT
+                assignie TEXT ,
+                jira_issue_key TEXT
+            )
+        ''')
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS jira_ticketing_data (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                jira_base_url TEXT,
+                username TEXT,
+                password TEXT ,
+                send_to_jira INTEGER DEFAULT 0,
+                project_key TEXT
             )
         ''')
         c.execute('''
@@ -121,7 +132,6 @@ def remove_oncall_staff(user_id):
     conn.commit()
     conn.close()
 
-# Function to update user state
 def update_user_state(user_id, state, message=None):
     conn = sqlite3.connect('bot-db.db')
     c = conn.cursor()
@@ -152,7 +162,6 @@ def set_schedule_setting(setting_value):
     
     conn.commit()
     conn.close()
-
 
 def get_schedule_setting():
     conn = sqlite3.connect('bot-db.db')
@@ -239,7 +248,7 @@ def mark_message_as_seen(message_id):
     conn.close()
 
 
-def store_message(user_id, username, message, assignie=None, status='not reported'):
+def store_message(user_id, username, message, assignie=None, status='not reported', jira_issue_key=None):
     conn = sqlite3.connect('bot-db.db')
     c = conn.cursor()
     
@@ -254,10 +263,10 @@ def store_message(user_id, username, message, assignie=None, status='not reporte
         minute=tehran_time.minute
     ).strftime('%Y-%m-%d %H:%M')
     
-    created_date = tehran_time.strftime('%Y-%m-%d %H:%M:%S')  # Store in datetime format
+    created_date = tehran_time.strftime('%Y-%m-%d %H:%M:%S')
 
-    c.execute('INSERT INTO user_messages (user_id, username, message, persian_date, created_date, assignie, status) VALUES (?, ?, ?, ?, ?, ?, ?)', 
-              (user_id, username, message, persian_date, created_date, assignie, status))
+    c.execute('INSERT INTO user_messages (user_id, username, message, persian_date, created_date, assignie, status, jira_issue_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
+              (user_id, username, message, persian_date, created_date, assignie, status, jira_issue_key))
 
     message_id = c.lastrowid
     conn.commit()
@@ -289,5 +298,76 @@ def get_ticket_details(message_id):
     conn.close()
     return ticket
 
+def get_jira_credentials():
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+    c.execute('SELECT jira_base_url, username, password, send_to_jira, project_key FROM jira_ticketing_data')
+    result = c.fetchone()
+    conn.close()
+    return result if result else None
+
+def set_jira_status(status):
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+    c.execute('UPDATE jira_ticketing_data SET send_to_jira = ? WHERE send_to_jira IS NOT NULL', (int(status),))
+    conn.commit()
+    conn.close()
+
+def set_jira_base_url(base_url):
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+    c.execute('SELECT COUNT(*) FROM jira_ticketing_data')
+    count = c.fetchone()[0]
+    
+    if count > 0:
+        c.execute('UPDATE jira_ticketing_data SET jira_base_url = ? WHERE id IS NOT NULL', (base_url,))
+    else:
+        # Create a new row if none exists
+        c.execute('INSERT INTO jira_ticketing_data (jira_base_url) VALUES (?)', (base_url,))
+    
+    conn.commit()
+    conn.close()
+
+def set_jira_username(username):
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+    c.execute('SELECT COUNT(*) FROM jira_ticketing_data')
+    count = c.fetchone()[0]
+    
+    if count > 0:
+        c.execute('UPDATE jira_ticketing_data SET username = ? WHERE id IS NOT NULL', (username,))
+    else:
+        raise Exception("No row exists in jira_ticketing_data to update.")
+    
+    conn.commit()
+    conn.close()
+
+def set_jira_password(password):
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+    c.execute('SELECT COUNT(*) FROM jira_ticketing_data')
+    count = c.fetchone()[0]
+    
+    if count > 0:
+        c.execute('UPDATE jira_ticketing_data SET password = ? WHERE id IS NOT NULL', (password,))
+    else:
+        raise Exception("No row exists in jira_ticketing_data to update.")
+    
+    conn.commit()
+    conn.close()
+
+def set_jira_project_key(project_key):
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+    c.execute('SELECT COUNT(*) FROM jira_ticketing_data')
+    count = c.fetchone()[0]
+    
+    if count > 0:
+        c.execute('UPDATE jira_ticketing_data SET project_key = ? WHERE id IS NOT NULL', (project_key,))
+    else:
+        raise Exception("No row exists in jira_ticketing_data to update.")
+    
+    conn.commit()
+    conn.close()
 
 create_db()
