@@ -10,10 +10,8 @@ echo -e "\e[32m
                                                                     
 \033[0m"
 
-# Update package list
 sudo apt-get update
 
-# Install git if not installed
 if ! command -v git &> /dev/null; then
     echo "Git is not installed. Installing Git..."
     sudo apt-get install -y git
@@ -21,7 +19,6 @@ else
     echo "Git is already installed."
 fi
 
-# Clone the project from GitHub
 if [ ! -d "Devops-Oncall-Bot" ]; then
     echo "Cloning the project from GitHub..."
     git clone https://github.com/amsepahvand/Devops-Oncall-Bot.git
@@ -31,7 +28,6 @@ fi
 
 cd Devops-Oncall-Bot
 
-# Install Docker if not installed
 if ! command -v docker &> /dev/null; then
     echo "Docker is not installed. Installing Docker..."
     curl -fsSL https://get.docker.com -o get-docker.sh
@@ -41,7 +37,6 @@ else
     echo "Docker is already installed."
 fi
 
-# Install SQLite3 if not installed
 if ! command -v sqlite3 &> /dev/null; then
     echo "SQLite3 is not installed. Installing SQLite3..."
     sudo apt-get install -y sqlite3
@@ -49,11 +44,9 @@ else
     echo "SQLite3 is already installed."
 fi
 
-# Check if the database file exists
 if [ ! -f "bot-db.db" ]; then
     echo "Creating database and tables..."
 
-    # Create the database and tables using SQLite commands
     sqlite3 bot-db.db <<EOF
 CREATE TABLE IF NOT EXISTS user_messages (
     message_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,8 +58,9 @@ CREATE TABLE IF NOT EXISTS user_messages (
     created_date DATE,
     seen_date DATE,
     assignie TEXT,
-    jira_issue_key TEXT
+    jira_issue_key TEXT DEFAULT None
 );
+
 CREATE TABLE IF NOT EXISTS jira_ticketing_data (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     jira_base_url TEXT,
@@ -79,7 +73,8 @@ CREATE TABLE IF NOT EXISTS jira_ticketing_data (
 CREATE TABLE IF NOT EXISTS oncall_staff (
     user_id INTEGER PRIMARY KEY,
     name TEXT,
-    username TEXT
+    username TEXT,
+    jira_username TEXT DEFAULT None
 );
 
 CREATE TABLE IF NOT EXISTS user_state (
@@ -108,6 +103,17 @@ CREATE TABLE IF NOT EXISTS oncall_history (
     name TEXT,
     username TEXT,
     date TEXT UNIQUE
+);
+CREATE TABLE IF NOT EXISTS watcher_admins (
+    user_id INTEGER PRIMARY KEY,
+    name TEXT,
+    username TEXT
+);
+CREATE TABLE IF NOT EXISTS first_time_users (
+    user_id INTEGER PRIMARY KEY,
+    username TEXT,
+    name TEXT,
+    start_time DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 EOF
 
