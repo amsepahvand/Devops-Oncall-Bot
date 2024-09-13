@@ -108,7 +108,7 @@ def button_handler(update, context) :
     elif query.data == ('change_jira_project_key'):
         set_or_change_jira_project_key(query)
     elif query.data == ('jira_test_connection'):
-        jira_test_connection(query)
+        jira_test_connection(update, context)
     elif query.data.startswith('jira_username_'):
         set_jira_oncalls_username(query)
     elif query.data == ('bot_setting'):
