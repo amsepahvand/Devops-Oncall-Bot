@@ -5,6 +5,7 @@ import jdatetime
 from datetime import datetime
 import pytz
 import logging
+import docker
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -465,6 +466,33 @@ def add_first_time_user(user_id, username, name):
     c.execute('INSERT INTO first_time_users (user_id, username, name) VALUES (?, ?, ?)', (user_id, username, name))
     conn.commit()
     conn.close()
+
+def restart_container(container_name):
+    client = docker.from_env()
+    try:
+        container = client.containers.get(container_name)
+        container.restart()
+        logging.info(f"Container '{container_name}' has been restarted.")
+    except docker.errors.NotFound:
+        logging.error(f"Container '{container_name}' not found.")
+    except Exception as e:
+        logging.error(f"An error occurred while restarting the container: {e}")
+
+def set_oncall_group_id(group_id):
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+    c.execute('SELECT COUNT(*) FROM oncall_group WHERE group_id IS NOT NULL')
+    exists = c.fetchone()[0] > 0
+    
+    if exists:
+        c.execute('UPDATE oncall_group SET group_id = ? WHERE group_id IS NOT NULL', (group_id,))
+        restart_container('devops_oncall_bot')
+    else:
+        logging.warning("No existing group_id found to update.")
+    
+    conn.commit()
+    conn.close()
+
 
 create_db()
 

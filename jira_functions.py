@@ -83,7 +83,7 @@ def get_jira_issue_status(issue_key):
         return None
     
 def create_test_issue():
-    summary = "Test Issue"
+    summary = "Test Issue From Oncall Bot"
     description = "This is a test issue created for validation."
     
     issue_key = create_jira_issue(summary, description)

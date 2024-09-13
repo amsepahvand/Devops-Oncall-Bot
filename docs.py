@@ -34,14 +34,10 @@ def bot_guide(update, context):
         "*8.اتواساین تیکت ها 📌\n"
         "برای اینکه تیکت های جیرا به افراد آنکال اساین بشن توی قسمت مشاهده لیست نفرات روی گزینه Jira Username جلوی اسم هر نفر بزنید و یوزنیمی که افراد داخل جیرا دارن رو وارد کنید دقت کنید که یوزنیم جیراشون وارد بشه نه اسم نفرات بعد از اون وقتی یه تیکت داخل گروه آنکال بیاد هرکی رو دکمه مشاهده نشده بزنه تیکت توی جیرا به اون نفر اساین میشه\n\n"
 
-
     )
 
-    context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=guide_message,
-        parse_mode='Markdown'
-    )
+    context.bot.send_message(chat_id=update.effective_chat.id,text=guide_message,parse_mode='Markdown')
+
 
 def bot_features(update, context):
     features_message = (
@@ -68,8 +64,4 @@ def bot_features(update, context):
         "مشتری های شما وقتی تیکت میزنن میتونن ببینن مسئول تیکتشون چه کسی هست و چنانچه به جیرا وصل باشه شماره تیکت جیراشون رو ببینن ، ضمنا داخل بخش تیکت های من میتونن وضعیت تسک توی جیرا رو هم متوجه بشن که توی چه وضعیتی قرار داره\n\n"
     )
 
-    context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=features_message,
-        parse_mode='Markdown'
-    )
+    context.bot.send_message(chat_id=update.effective_chat.id,text=features_message,parse_mode='Markdown')

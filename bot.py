@@ -11,7 +11,7 @@ from database import (
     mark_message_as_seen, update_user_state, get_user_state, get_api_token, add_oncall_staff, get_bot_owner_id, set_schedule_setting, get_schedule_setting, 
     add_oncall_history, check_date_exists, get_oncall_history_in_range, get_jira_credentials, set_jira_status, set_jira_base_url, set_jira_username,
     set_jira_password, set_jira_project_key, add_new_watcher_admin, get_watcher_list, remove_watcher_admins, is_bot_manager, set_jira_oncalls_username_in_db,
-    get_user_state_message, get_oncall_user_name, is_first_time_user, add_first_time_user, get_jira_issue_key_from_message
+    get_user_state_message, get_oncall_user_name, is_first_time_user, add_first_time_user, get_jira_issue_key_from_message,set_oncall_group_id
 )
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, CallbackQueryHandler
@@ -106,16 +106,43 @@ def button_handler(update, context) :
         set_or_change_jira_password(query)
     elif query.data == ('change_jira_project_key'):
         set_or_change_jira_project_key(query)
+    elif query.data == ('jira_test_connection'):
+        jira_test_connection(query)
     elif query.data.startswith('jira_username_'):
         set_jira_oncalls_username(query)
     elif query.data == ('bot_setting'):
         bot_setting(query)
+    elif query.data == ('change_oncall_group_id'):
+        change_oncall_group_id(query)
+    elif query.data == ('about_bot'):
+        about_bot(query)
     elif query.data == ('bot_guide'):
         bot_guide(update, context)
     elif query.data == ('bot_features'):
         bot_features(update, context)
 
+
+def change_oncall_group_id(query):
+    oncall_group_id = get_oncall_group_id()
+    user_id = get_user_id(query)
+    update_user_state(user_id,'change_oncall_group_id')    
+    keyboard = [
+        [InlineKeyboardButton("منصرف شدم", callback_data='bot_setting')],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    query.edit_message_text(f"لطفا آیدی گروه آنکال رو وارد کنید گروه آیدی با - شروع میشود\n\n*آیدی فعلی : {oncall_group_id}*\n📍", reply_markup=reply_markup, parse_mode='Markdown')
+
 def bot_setting(query):
+    user_id = get_user_id(query)
+    update_user_state(user_id,'None')  
+    keyboard = [
+        [InlineKeyboardButton("تغییر آیدی گروه آنکال 📬", callback_data='change_oncall_group_id')],
+        [InlineKeyboardButton("بازگشت به منو قبلی 🔙", callback_data='admin_panel')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    query.edit_message_text("بخش تنظیمات ربات 🛠", reply_markup=reply_markup, parse_mode='Markdown')
+
+def about_bot(query):
     keyboard = [
         [InlineKeyboardButton("قابلیت های ربات 🪩", callback_data='bot_features')],
         [InlineKeyboardButton("آموزش های ربات 📚", callback_data='bot_guide')],
@@ -137,6 +164,13 @@ def set_jira_oncalls_username(query):
     user_id = get_user_id(query)
     update_user_state(user_id,'set_jira_oncalls_username',f'{selected_user_id}')
     query.edit_message_text('لطفا یوزنیم جیرای شخص مورد نظرتون رو همونطوری که توی جیرا هست وارد کنید', reply_markup = None)
+
+def jira_test_connection(update, context):
+    status = create_test_issue()
+    if status == 'ok':
+        context.bot.send_message(chat_id=update.effective_chat.id,text="اتصال به جیرا با موفقیت برقرار شد ✅",parse_mode='Markdown')     
+    else:
+        context.bot.send_message(chat_id=update.effective_chat.id,text="اتصال به جیرا برقرار نشد ❌\n\n لطفا مشخصات جیرا ، سطح دسترسی کاربر جیرا یا وضعیت سرویس جیرا بررسی شود",parse_mode='Markdown')
 
 def set_or_change_jira_base_url(query):
     user_id = get_user_id(query)
@@ -185,6 +219,7 @@ def change_jira_credential(query):
         [InlineKeyboardButton("تغییر USERNAME کاربر جیرا 👤", callback_data="change_jira_username")],
         [InlineKeyboardButton("تغییر کلمه عبور فعلی 🔑", callback_data='change_jira_password')],
         [InlineKeyboardButton("تغییر PROJECT KEY 📂", callback_data="change_jira_project_key")],
+        [InlineKeyboardButton("🛅 Test Connection", callback_data="jira_test_connection")],
         [InlineKeyboardButton("بازگشت به تنظیمات جیرا 🔙", callback_data="jira_setting")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -199,9 +234,9 @@ def change_jira_status(query):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     if new_status == 1:
-        query.edit_message_text("وضعیت تغییر کرد: تیکت‌ها به جیرا ارسال خواهند شد ✅.", reply_markup=reply_markup)
+        query.edit_message_text("وضعیت تغییر کرد: تیکت‌ها به جیرا ارسال خواهند شد ✅", reply_markup=reply_markup)
     else:
-        query.edit_message_text("وضعیت تغییر کرد: تیکت‌ها به جیرا ارسال نخواهند شد ⛔.", reply_markup=reply_markup)
+        query.edit_message_text("وضعیت تغییر کرد: تیکت‌ها به جیرا ارسال نخواهند شد ⛔", reply_markup=reply_markup)
 
 
 def show_jira_setting(query):
@@ -680,7 +715,8 @@ def show_admin_panel(query):
         [InlineKeyboardButton("👥 مشاهده لیست نفرات", callback_data='show_oncall_list')],
         [InlineKeyboardButton("📋 تنظیمات و زمانبندی OnCall", callback_data='schedule_setting')],
         [InlineKeyboardButton("🌀 تنظیمات ارسال تیکت به جیرا", callback_data='jira_setting')],
-        [InlineKeyboardButton("🤖 تنظیمات ربات", callback_data='bot_setting')],
+        [InlineKeyboardButton("⚙ تنظیمات ربات", callback_data='bot_setting')],
+        [InlineKeyboardButton("🤖 درباره ربات", callback_data='about_bot')],
         [InlineKeyboardButton("🔙 بازگشت به منو اصلی", callback_data='main_menu')]
     ]
     reply_markup = InlineKeyboardMarkup(admin_keyboard)
@@ -808,6 +844,13 @@ def handle_message(update: Update, context: CallbackContext) -> None:
             [InlineKeyboardButton("بازگشت به لیست آنکال", callback_data="show_oncall_list")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         update.message.reply_text('یوزنیم جیرا با موفقیت برای کاربر ثبت شد',reply_markup=reply_markup)
+    elif state == 'change_oncall_group_id':
+        set_oncall_group_id(message)
+        keyboard = [
+            [InlineKeyboardButton("بازگشت به تنظیمات", callback_data="bot_setting")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        update.message.reply_text('آیدی گروه با موفقیت ثبت شد',reply_markup=reply_markup)
+
 
 
 def back_to_start(update: Update, context: CallbackContext) -> None:

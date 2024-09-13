@@ -6,3 +6,4 @@ services:
     volumes:
       - .:/app
     restart: always
+    container_name: devops_oncall_bot
