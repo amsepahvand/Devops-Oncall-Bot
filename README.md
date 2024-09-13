@@ -16,6 +16,8 @@ Getting this bot up and running is easy ! Follow the steps below, and you'll be 
 
 Make sure you have a ubuntu server ready. Any version will do, but the newer, the better!
 
+Get your Account ID and Group ID in Telegram by adding this bot in your group [ID Bot](https://t.me/username_to_id_bot)
+
 ### Step 2: Run the Magic Command 🪄
 
 Open up your terminal and paste this magical command:
