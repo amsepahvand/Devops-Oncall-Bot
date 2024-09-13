@@ -1,9 +1,17 @@
 import os
+import sys
 import sqlite3
 import jdatetime
 from datetime import datetime
 import pytz
 import logging
+
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO,
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger(__name__)
 
 def create_db():
     if not os.path.exists('bot-db.db'):
@@ -20,7 +28,7 @@ def create_db():
                 created_date DATE,
                 seen_date DATE ,
                 assignie TEXT ,
-                jira_issue_key TEXT
+                jira_issue_key TEXT DEFAULT None
             )
         ''')
         c.execute('''
@@ -37,7 +45,8 @@ def create_db():
             CREATE TABLE IF NOT EXISTS oncall_staff (
                 user_id INTEGER PRIMARY KEY,
                 name TEXT,
-                username TEXT
+                username TEXT,
+                jira_username TXT DEFAULT None
             )
         ''')
         c.execute('''
@@ -74,8 +83,46 @@ def create_db():
                 date TEXT UNIQUE
             )
         ''')
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS watcher_admins (
+                user_id INTEGER PRIMARY KEY,
+                name TEXT,
+                username TEXT
+            )
+        ''')
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS first_time_users (
+                user_id INTEGER PRIMARY KEY,
+                username TEXT,
+                name TEXT,
+                start_time DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
         conn.commit()
         conn.close()
+
+def get_oncall_user_name(user_id):
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+    c.execute('SELECT name , jira_username FROM oncall_staff WHERE user_id = ?', (user_id,))
+    result = c.fetchone()
+    conn.close()
+    return result if result else (None, None)
+
+def get_jira_issue_key_from_message(message_id):
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+    c.execute('SELECT jira_issue_key FROM user_messages WHERE message_id = ?', (message_id,))
+    result = c.fetchone()
+    conn.close()
+    return result[0] if result else None 
+
+def set_jira_oncalls_username_in_db(user_id, jira_username):
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+    c.execute('UPDATE oncall_staff SET jira_username = ? WHERE user_id = ?', (jira_username, user_id))
+    conn.commit()
+    conn.close()
 
 def set_api_token(token):
     conn = sqlite3.connect('bot-db.db')
@@ -108,8 +155,6 @@ def get_oncall_group_id():
     conn.close()
     return result[0] if result else None
 
-
-
 def add_oncall_staff(user_id, name, username):
     conn = sqlite3.connect('bot-db.db')
     c = conn.cursor()
@@ -117,13 +162,35 @@ def add_oncall_staff(user_id, name, username):
     conn.commit()
     conn.close()
 
+def add_new_watcher_admin(user_id, name, username):
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+    c.execute('INSERT OR IGNORE INTO watcher_admins (user_id, name, username) VALUES (?, ?, ?)', (user_id, name, username))
+    conn.commit()
+    conn.close()
+
+def get_watcher_list():
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+    c.execute('SELECT user_id, name, username FROM watcher_admins')
+    watcher_admins = c.fetchall()
+    conn.close()
+    return watcher_admins 
+
 def get_oncall_list():
     conn = sqlite3.connect('bot-db.db')
     c = conn.cursor()
-    c.execute('SELECT user_id, name, username FROM oncall_staff')
+    c.execute('SELECT user_id, name, username, jira_username FROM oncall_staff')
     staff = c.fetchall()
     conn.close()
     return staff
+
+def remove_watcher_admins(user_id):
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+    c.execute('DELETE FROM watcher_admins WHERE user_id = ?', (user_id,))
+    conn.commit()
+    conn.close()
 
 def remove_oncall_staff(user_id):
     conn = sqlite3.connect('bot-db.db')
@@ -140,14 +207,21 @@ def update_user_state(user_id, state, message=None):
     conn.commit()
     conn.close()
 
-
 def get_user_state(user_id):
     conn = sqlite3.connect('bot-db.db')
     c = conn.cursor()
     c.execute('SELECT state, message FROM user_state WHERE user_id = ?', (user_id,))
     result = c.fetchone()
     conn.close()
-    return result[0] if result else (None, None)  
+    return result[0] if result else (None, None)
+
+def get_user_state_message(user_id):
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+    c.execute('SELECT state, message FROM user_state WHERE user_id = ?', (user_id,))
+    result = c.fetchone()
+    conn.close()
+    return result[1] if result else (None, None) 
 
 def set_schedule_setting(setting_value):
     conn = sqlite3.connect('bot-db.db')
@@ -282,6 +356,14 @@ def is_oncall_staff(user_id):
     conn.close()
     return exists
 
+def is_bot_manager(user_id):
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+    c.execute('SELECT COUNT(*) FROM watcher_admins WHERE user_id = ?', (user_id,))
+    exists = c.fetchone()[0] > 0
+    conn.close()
+    return exists
+
 def get_user_tickets(user_id):
     conn = sqlite3.connect('bot-db.db')
     c = conn.cursor()
@@ -293,7 +375,7 @@ def get_user_tickets(user_id):
 def get_ticket_details(message_id):
     conn = sqlite3.connect('bot-db.db')
     c = conn.cursor()
-    c.execute('SELECT message, persian_date, assignie FROM user_messages WHERE message_id = ?', (message_id,))
+    c.execute('SELECT message, persian_date, assignie, jira_issue_key  FROM user_messages WHERE message_id = ?', (message_id,))
     ticket = c.fetchone()
     conn.close()
     return ticket
@@ -322,7 +404,6 @@ def set_jira_base_url(base_url):
     if count > 0:
         c.execute('UPDATE jira_ticketing_data SET jira_base_url = ? WHERE id IS NOT NULL', (base_url,))
     else:
-        # Create a new row if none exists
         c.execute('INSERT INTO jira_ticketing_data (jira_base_url) VALUES (?)', (base_url,))
     
     conn.commit()
@@ -367,6 +448,21 @@ def set_jira_project_key(project_key):
     else:
         raise Exception("No row exists in jira_ticketing_data to update.")
     
+    conn.commit()
+    conn.close()
+
+def is_first_time_user(user_id):
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+    c.execute('SELECT COUNT(*) FROM first_time_users WHERE user_id = ?', (user_id,))
+    is_first_time = c.fetchone()[0] == 0
+    conn.close()
+    return is_first_time
+
+def add_first_time_user(user_id, username, name):
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+    c.execute('INSERT INTO first_time_users (user_id, username, name) VALUES (?, ?, ?)', (user_id, username, name))
     conn.commit()
     conn.close()
 
