@@ -467,3 +467,10 @@ def add_first_time_user(user_id, username, name):
     conn.close()
 
 create_db()
+
+
+
+
+
+
+#    logger.info(f"Test issue created successfully: {result}")

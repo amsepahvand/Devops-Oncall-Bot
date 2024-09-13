@@ -4,15 +4,17 @@ from datetime import datetime, timedelta
 import emoji
 import pytz
 import jdatetime
-from jira_functions import create_jira_issue, create_test_issue
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, CallbackQueryHandler
+from docs import bot_guide, bot_features
+from jira_functions import create_jira_issue, create_test_issue, get_jira_issue_status, assign_issue_to_user
 from database import (
     create_db, store_message, get_oncall_list, get_oncall_group_id, get_user_tickets, get_ticket_details, is_oncall_staff, remove_oncall_staff,
     mark_message_as_seen, update_user_state, get_user_state, get_api_token, add_oncall_staff, get_bot_owner_id, set_schedule_setting, get_schedule_setting, 
     add_oncall_history, check_date_exists, get_oncall_history_in_range, get_jira_credentials, set_jira_status, set_jira_base_url, set_jira_username,
-    set_jira_password, set_jira_project_key
+    set_jira_password, set_jira_project_key, add_new_watcher_admin, get_watcher_list, remove_watcher_admins, is_bot_manager, set_jira_oncalls_username_in_db,
+    get_user_state_message, get_oncall_user_name, is_first_time_user, add_first_time_user, get_jira_issue_key_from_message
 )
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, CallbackQueryHandler
 
 
 logging.basicConfig(
@@ -52,12 +54,20 @@ def button_handler(update, context) :
         start(update, context)
     elif query.data == 'show_oncall_list':
         show_oncall_list(query)
+    elif query.data == 'show_bot_admins':
+        show_bot_admins(query)
     elif query.data == 'add_new_oncall':
         add_oncall(query)
+    elif query.data == 'add_new_bot_admin':
+        add_manager(query)
     elif query.data == 'delete_oncalls':
         delete_oncalls(query , update)
+    elif query.data == 'delete_manager':
+        delete_manager(query, update)
     elif query.data.startswith('delete_oncall_'):
         confirm_delete(query , update)
+    elif query.data.startswith('delete_manager_'):
+        confirm_delete_manager(query , update)
     elif query.data == 'schedule_setting':
         schedule_setting(query)
     elif query.data == 'oncall_periods':
@@ -96,10 +106,37 @@ def button_handler(update, context) :
         set_or_change_jira_password(query)
     elif query.data == ('change_jira_project_key'):
         set_or_change_jira_project_key(query)
+    elif query.data.startswith('jira_username_'):
+        set_jira_oncalls_username(query)
+    elif query.data == ('bot_setting'):
+        bot_setting(query)
+    elif query.data == ('bot_guide'):
+        bot_guide(update, context)
+    elif query.data == ('bot_features'):
+        bot_features(update, context)
+
+def bot_setting(query):
+    keyboard = [
+        [InlineKeyboardButton("قابلیت های ربات 🪩", callback_data='bot_features')],
+        [InlineKeyboardButton("آموزش های ربات 📚", callback_data='bot_guide')],
+        [InlineKeyboardButton("بازگشت 🔙", callback_data='jira_setting')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    message = (
+        "🎉 باعث افتخاره که ربات ما رو انتخاب کردین!\n\n"
+        "💬 همیشه میتونید نظراتتون رو باهامون از طریق لینک زیر به اشتراک بذارید:\n"
+        "🔗 [Github](https://github.com/amsepahvand/Devops-Oncall-Bot)\n\n"
+        "📖 توی این قسمت میتونید قابلیت ها و نحوه استفاده از ربات رو مطالعه کنید."
+    )    
+    query.edit_message_text(message, reply_markup=reply_markup, parse_mode='Markdown')
 
 
-
-
+def set_jira_oncalls_username(query):
+    selected_user_id = query.data.split('_')[-1]
+    user_id = get_user_id(query)
+    update_user_state(user_id,'set_jira_oncalls_username',f'{selected_user_id}')
+    query.edit_message_text('لطفا یوزنیم جیرای شخص مورد نظرتون رو همونطوری که توی جیرا هست وارد کنید', reply_markup = None)
 
 def set_or_change_jira_base_url(query):
     user_id = get_user_id(query)
@@ -139,8 +176,6 @@ def set_or_change_jira_project_key(update):
     update.message.reply_text('لطفا PROJECT KEY  را وارد کنید ، PROJECT KEY رو میتونید از داخل URL پروژه دربیاریددر واقع همون کلمه قبل از شماره ایشو های پروژه جیرا است')
 
 
-
-
 def change_jira_credential(query):
     user_id = get_user_id(query)
     update_user_state(user_id, 'change_jira_credential')
@@ -154,8 +189,6 @@ def change_jira_credential(query):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     query.edit_message_text(f" هرکدوم از مشخصات رو میخوای عوض کنی انتخاب کن\n BASE URL: {jira_base_url}\nUSERNAME : {username}\nPASSWORD : ░ ░ ░ ░ ░ \nPROJECT KEY : {project_key}🔸", reply_markup=reply_markup)
-
-
 
 
 def change_jira_status(query):
@@ -212,30 +245,23 @@ def show_jira_setting(query):
         reply_markup = InlineKeyboardMarkup(keyboard)
         query.edit_message_text("برای استفاده از این قسمت ابتدا باید مشخصات اولیه جیرا را تکمیل کنید.", reply_markup=reply_markup)
 
-
-
-
-
-
-
-
-
-
-
-
-    
-
-
 def show_ticket_details(query, message_id):
     ticket = get_ticket_details(message_id)
 
     if ticket:
-        message, persian_date, assignie = ticket
+        message, persian_date, assignie, jira_issue_key = ticket
+        
         details = (
             f"\n📝 پیام: {message}\n\n"
             f"📅 تاریخ: {persian_date}\n\n"
             f"👤 واگذار شده به: {assignie}\n\n"
         )
+        if jira_issue_key:
+            details += f"🌀 شماره تیکت جیرا: {jira_issue_key}\n\n"
+            status = get_jira_issue_status(jira_issue_key)
+            if status != None :
+                details += f"📌 وضعیت تیکت: {status}\n\n🔸"
+
         query.message.reply_text(details)
     else:
         query.message.reply_text("❌ تیکت پیدا نشد.")
@@ -244,15 +270,14 @@ def show_ticket_details(query, message_id):
 def see_my_requests(query):
     user_id = get_user_id(query)
     tickets = get_user_tickets(user_id)
-
     if not tickets:
         query.message.reply_text("🔍 شما هیچ تیکتی ندارید.")
         return
 
+    tickets = tickets[::-1]
     keyboard = []
     for ticket in tickets:
         message_id, message, _, _= ticket
-        # Show the first 30 characters of the message
         short_message = message[:30] + "..." if len(message) > 30 else message
         keyboard.append([InlineKeyboardButton(short_message, callback_data=f'show_ticket_{message_id}')])
     keyboard.append([InlineKeyboardButton("بازگشت به منوی اصلی", callback_data='main_menu')])
@@ -263,9 +288,13 @@ def see_my_requests(query):
 
 def mark_message_as_seen_in_db(query):
     message_id = int(query.data.split("_")[-1])
+    user_id = query.from_user.id 
+    user_name, jira_username = get_oncall_user_name(user_id)
     mark_message_as_seen(message_id)
-    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("✅ مشاهده شد", callback_data="None")]])
-    
+    if jira_username:
+        jira_issue_key = get_jira_issue_key_from_message(message_id)
+        assign_issue_to_user(jira_username, jira_issue_key)
+    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(f"✅توسط {user_name} مشاهده شد", callback_data="None")]])
     query.edit_message_reply_markup(reply_markup=reply_markup)
 
 
@@ -288,13 +317,13 @@ def send_schedule_list_to_group(query, context):
 
     oncall_history = get_oncall_history_in_range(jalali_start_date, jalali_end_date)
     
-    if not oncall_history:  # Check if the on-call history is empty
+    if not oncall_history:
         buttons = [
             [InlineKeyboardButton("ساخت لیست آنکالی", callback_data="schedule_setting")]
         ]
         reply_markup = InlineKeyboardMarkup(buttons)
         query.edit_message_text(text="هنوز  لیست آنکالی ساخته نشده", reply_markup=reply_markup)
-        return  # Exit the function if the list is empty
+        return
 
     oncall_count = {}
     schedule_message = ""
@@ -337,7 +366,6 @@ def alert_user_about_exist_list(query, date):
     ]
     reply_markup = InlineKeyboardMarkup(buttons)
     query.edit_message_text(text=f"❗ برای تاریخ‌های مورد نظر رکوردهایی در دیتابیس موجود است. آیا بازنویسی شود؟", reply_markup=reply_markup)
-
 
 
 def alert_user_about_exist_list(query, date):
@@ -384,7 +412,6 @@ def generate_oncall_schedule(query , context):
 
     existing_dates = []
 
-    
     for day in range(30):
         future_date = current_date + timedelta(days=day)
         jalali_date = jdatetime.datetime.fromgregorian(
@@ -489,7 +516,7 @@ def delete_oncalls(query, update):
     records = get_oncall_list()
     buttons = []
 
-    for user_id, name, username in records:
+    for user_id, name, username, jira_username in records:
         row = [
             InlineKeyboardButton(f"{name}", callback_data=f"no_action"), 
             InlineKeyboardButton(f"@{username}", url=f"https://t.me/{username}"),
@@ -497,6 +524,23 @@ def delete_oncalls(query, update):
         ]
         buttons.append(row)
     buttons.append([InlineKeyboardButton("🔙 منصرف شدم", callback_data="show_oncall_list")])
+    reply_markup = InlineKeyboardMarkup(buttons)
+    query.edit_message_text(text='لطفاً فردی که می‌خواهید حذف کنید را انتخاب و روی ضربدر بزنید.', reply_markup=reply_markup)
+
+def delete_manager(query, update):
+    user_id = get_user_id(query)
+    update_user_state(user_id, 'delete_manager', 'None')
+    records = get_watcher_list()
+    buttons = []
+
+    for user_id, name, username in records:
+        row = [
+            InlineKeyboardButton(f"{name}", callback_data=f"no_action"), 
+            InlineKeyboardButton(f"@{username}", url=f"https://t.me/{username}"),
+            InlineKeyboardButton(f"{emoji.emojize('❌')}", callback_data=f"delete_manager_{user_id}")  
+        ]
+        buttons.append(row)
+    buttons.append([InlineKeyboardButton("🔙 منصرف شدم", callback_data="show_bot_admins")])
     reply_markup = InlineKeyboardMarkup(buttons)
     query.edit_message_text(text='لطفاً فردی که می‌خواهید حذف کنید را انتخاب و روی ضربدر بزنید.', reply_markup=reply_markup)
 
@@ -512,6 +556,17 @@ def confirm_delete(query, update):
         reply_markup = InlineKeyboardMarkup(buttons)
         query.edit_message_text(text="✅ نفر مورد نظر با موفقیت حذف شد.", reply_markup=reply_markup)
 
+def confirm_delete_manager(query, update):
+    user_id = get_user_id(update)
+    state = get_user_state(user_id)
+    if state == 'delete_manager':
+        manager_userid = query.data.split('_')[2]
+        remove_watcher_admins(manager_userid)
+        buttons = []
+        buttons.append([InlineKeyboardButton("🔙 بازگشت به لیست نفرات", callback_data="show_bot_admins")])
+        reply_markup = InlineKeyboardMarkup(buttons)
+        query.edit_message_text(text="✅ مدیر مورد نظر با موفقیت حذف شد.", reply_markup=reply_markup)
+
 
 def add_oncall(query):
     user_id = get_user_id(query)
@@ -521,6 +576,17 @@ def add_oncall(query):
     ]
     reply_markup = InlineKeyboardMarkup(buttons)
     query.edit_message_text(text='لطفاً یک پیام از فردی که می‌خواهید به عنوان آنکال جدید اضافه کنید، برای من فوروارد کنید.', reply_markup=reply_markup)
+
+def add_manager(query):
+    user_id = get_user_id(query)
+    update_user_state(user_id, 'add_new_manager_username', 'None')
+    buttons = [
+        [InlineKeyboardButton("🔙 منصرف شدم", callback_data="admin_panel")],
+    ]
+    reply_markup = InlineKeyboardMarkup(buttons)
+    query.edit_message_text(text='لطفاً یک پیام از فردی که می‌خواهید به عنوان مدیر ربات اضافه کنید، برای من فوروارد کنید.', reply_markup=reply_markup)
+
+
 
 def handle_forwarded_message(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
@@ -535,7 +601,7 @@ def handle_forwarded_message(update: Update, context: CallbackContext) -> None:
             forwarded_username = update.message.forward_from.username if update.message.forward_from.username else "N/A"
             add_oncall_staff(forwarded_user_id, forwarded_first_name, forwarded_username)
             
-            success_message = f'✅ ادمین جدید با نام {forwarded_first_name} و شناسه کاربری @{forwarded_username} اضافه شد!'
+            success_message = f'✅ فرد آنکال جدید با نام {forwarded_first_name} و شناسه کاربری @{forwarded_username} اضافه شد!'
             buttons = [
                 [InlineKeyboardButton("🔙 بازگشت به لیست نفرات", callback_data="show_oncall_list")]
             ]
@@ -546,17 +612,30 @@ def handle_forwarded_message(update: Update, context: CallbackContext) -> None:
             update_user_state(user_id, 'normal')
         else:
             update.message.reply_text('🚫 لطفاً یک پیام از کاربر مورد نظر فوروارد کنید.')
+    elif state == 'add_new_manager_username':
+            forwarded_user_id = update.message.forward_from.id
+            forwarded_first_name = update.message.forward_from.first_name
+            forwarded_username = update.message.forward_from.username if update.message.forward_from.username else "N/A"
+            add_new_watcher_admin(forwarded_user_id, forwarded_first_name, forwarded_username)
+            success_message = f'✅ مدیر جدید ربات با نام {forwarded_first_name} و شناسه کاربری @{forwarded_username} اضافه شد!'
+            buttons = [
+                [InlineKeyboardButton("🔙 بازگشت به لیست نفرات", callback_data="show_bot_admins")]
+            ]
+            reply_markup = InlineKeyboardMarkup(buttons)
+            
+            update.message.reply_text(success_message, reply_markup=reply_markup)
 
 
-def show_oncall_list(query):
-    records = get_oncall_list()
+
+
+def show_bot_admins(query):
+    records = get_watcher_list()
     buttons = []
     buttons.append([
-        InlineKeyboardButton("Admin Name", callback_data="no_action"),
+        InlineKeyboardButton("Manager Name", callback_data="no_action"),
         InlineKeyboardButton("Username", callback_data="no_action"),
         InlineKeyboardButton("User ID", callback_data="no_action")
     ])
-
     for user_id, name, username in records:
         row = [
             InlineKeyboardButton(f"{name}", callback_data=f"staff_name_{user_id}"),
@@ -564,24 +643,48 @@ def show_oncall_list(query):
             InlineKeyboardButton(f"{user_id}", callback_data=f"staff_id_{user_id}")
         ]
         buttons.append(row)
-    buttons.append([InlineKeyboardButton("➕ اضافه کردن افراد جدید", callback_data="add_new_oncall")])
+    buttons.append([InlineKeyboardButton("🔶 اضافه کردن مدیر جدید ", callback_data="add_new_bot_admin")])
+    buttons.append([InlineKeyboardButton("❌ حذف افراد", callback_data="delete_manager")])
+    buttons.append([InlineKeyboardButton("🔙 بازگشت به منو قبلی", callback_data="show_oncall_list")])
+    reply_markup = InlineKeyboardMarkup(buttons)
+    query.edit_message_text(text="📋 لیست مدیران ربات:", reply_markup=reply_markup)
+
+
+
+def show_oncall_list(query):
+    records = get_oncall_list()
+    buttons = []
+    buttons.append([
+        InlineKeyboardButton("Oncall Name", callback_data="no_action"),
+        InlineKeyboardButton("Username", callback_data="no_action"),
+        InlineKeyboardButton("Jira Username", callback_data="no_action")
+    ])
+
+    for user_id, name, username, jira_username in records:
+        row = [
+            InlineKeyboardButton(f"{name}", callback_data=f"staff_name_{user_id}"),
+            InlineKeyboardButton(f"@{username}", url=f"https://t.me/{username}"),
+            InlineKeyboardButton(f"{jira_username}", callback_data=f"jira_username_{user_id}")
+        ]
+        buttons.append(row)
+    buttons.append([InlineKeyboardButton("🔷 اضافه کردن افراد جدید ", callback_data="add_new_oncall")])
     buttons.append([InlineKeyboardButton("❌ حذف افراد", callback_data="delete_oncalls")])
+    buttons.append([InlineKeyboardButton("👥 مشاهده مدیران ربات ", callback_data="show_bot_admins")])
     buttons.append([InlineKeyboardButton("🔙 بازگشت به پنل مدیریت", callback_data="admin_panel")])
     reply_markup = InlineKeyboardMarkup(buttons)
-    query.edit_message_text(text="📋 لیست افراد:", reply_markup=reply_markup)
+    query.edit_message_text(text="📋 لیست افراد آنکال \n میتونید برای اتواساین تیکت های جیرا روی username جیرا هر نفر کلیک کنید و بصورت دستی واردش کنید\n📍:", reply_markup=reply_markup)
 
 
 def show_admin_panel(query):
     admin_keyboard = [
-        [InlineKeyboardButton("➖ مشاهده لیست نفرات", callback_data='show_oncall_list')],
+        [InlineKeyboardButton("👥 مشاهده لیست نفرات", callback_data='show_oncall_list')],
         [InlineKeyboardButton("📋 تنظیمات و زمانبندی OnCall", callback_data='schedule_setting')],
         [InlineKeyboardButton("🌀 تنظیمات ارسال تیکت به جیرا", callback_data='jira_setting')],
+        [InlineKeyboardButton("🤖 تنظیمات ربات", callback_data='bot_setting')],
         [InlineKeyboardButton("🔙 بازگشت به منو اصلی", callback_data='main_menu')]
     ]
     reply_markup = InlineKeyboardMarkup(admin_keyboard)
     query.edit_message_text(text='⚙️ پنل ادمین ربات، اینجا می‌توانید نفرات را ببینید یا اضافه/حذف کنید و یا اینکه لیست آنکال یک ماه آینده را بسازید:', parse_mode="HTML", reply_markup=reply_markup)
-
-
 
 
 
@@ -608,33 +711,37 @@ def handle_message(update: Update, context: CallbackContext) -> None:
 
         oncall_staff = get_oncall_list()
         if oncall_staff:
-            oncall_user_id, oncall_name, oncall_username = oncall_staff[0]
+            oncall_user_id, oncall_name, oncall_username, oncall_jira_username = oncall_staff[0]
             mention = f"@{oncall_username}"
 
             jira_data = get_jira_credentials()
-            send_to_jira = jira_data[3] if jira_data else 1  # Default to 1 if no data
+            send_to_jira = jira_data[3] if jira_data else 1
 
             jira_issue_key = None
             if send_to_jira == 1:
                 summary = message[:30] 
                 jira_issue_key = create_jira_issue(summary, message) 
 
-            message_id = store_message(user_id, username, message, assignie=oncall_username, status='not reported', jira_issue_key=jira_issue_key)
+            message_id = store_message(user_id, username, message, assignie=oncall_username, status='None', jira_issue_key=jira_issue_key)
 
             keyboard = [[InlineKeyboardButton("👁️ مشاهده نشده ⏱", callback_data=f"message_has_been_seen_{message_id}")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
-
-            context.bot.send_message(chat_id=str(oncall_group_id), text=f"📩 تیکت جدید\n\n👤 کاربر: {username}\n\n🗓️ تاریخ: {persian_now}\n\n💬 شرح پیام: \n{message} \n\n🔔 جهت اطلاع  \n\nنفر آنکال : {mention}\n🔸", reply_markup=reply_markup)
+            jira_base_url, _, _, _, _ = get_jira_credentials()
+            if jira_issue_key != None:
+                jira_issue_link = f"{jira_base_url}/browse/{jira_issue_key}"
+                context.bot.send_message(chat_id=str(oncall_group_id), text=f"📩 تیکت جدید\n\n👤 کاربر: @{username}\n\n🗓️ تاریخ: {persian_now}\n\n💬 شرح پیام: \n{message} \n\nلینک جیرا: {jira_issue_link}\n\n🔔 جهت اطلاع  \n\nنفر آنکال : {mention}\n🔸", reply_markup=reply_markup)
+            else:
+                context.bot.send_message(chat_id=str(oncall_group_id), text=f"📩 تیکت جدید\n\n👤 کاربر: @{username}\n\n🗓️ تاریخ: {persian_now}\n\n💬 شرح پیام: \n{message} \n\n🔔 جهت اطلاع  \n\nنفر آنکال : {mention}\n🔸", reply_markup=reply_markup)
 
             restart_keyboard = [
                 [InlineKeyboardButton("🔄 شروع مجدد", callback_data="restart_bot")]
             ]
             restart_reply_markup = InlineKeyboardMarkup(restart_keyboard)
-
-            update.message.reply_text(
-                f'✅ تیکت شما با موفقیت ثبت شد و {mention} مسئول رسیدگی به آن می‌باشد.\nدر سریع‌ترین زمان ممکن با شما ارتباط برقرار می‌کنند 🎉',
-                reply_markup=restart_reply_markup
-            )
+            if jira_issue_key != None:
+                update.message.reply_text(f'✅ تیکت شما با موفقیت ثبت شد و {mention} مسئول رسیدگی به آن می‌باشد.\n\n شماره تیکت : {jira_issue_key}\nدر سریع‌ترین زمان ممکن با شما ارتباط برقرار می‌کنند 🎉',reply_markup=restart_reply_markup)
+            else:
+                update.message.reply_text(f'✅ تیکت شما با موفقیت ثبت شد و {mention} مسئول رسیدگی به آن می‌باشد.\nدر سریع‌ترین زمان ممکن با شما ارتباط برقرار می‌کنند 🎉',reply_markup=restart_reply_markup)
+ 
         else:
             context.bot.send_message(chat_id=str(oncall_group_id), text=f"تنظیمات ربات اعم از نفرات آنکال یا زمانبندی آنکال به درستی اعمال نشده ، فراموش نکنید بعد از وارد کردن این موارد باید یک لیست هم بسازید", reply_markup=None)
             restart_keyboard = [
@@ -666,7 +773,6 @@ def handle_message(update: Update, context: CallbackContext) -> None:
         reply_markup = InlineKeyboardMarkup(keyboard)
         update.message.reply_text(f'New Project Key : {message}',reply_markup=reply_markup)
 
-
     elif state == 'import_jira_base_url':
         set_jira_base_url(message)
         update.message.reply_text(f'Base URL  :  {message}',reply_markup=None)
@@ -695,30 +801,30 @@ def handle_message(update: Update, context: CallbackContext) -> None:
                 [InlineKeyboardButton("بازگشت به منو مشخصات جیرا", callback_data="change_jira_credential")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             update.message.reply_text('مشخصات جیرا با موفقیت ثبت و وضعیت ارسال بطور خودکار فعال شد',reply_markup=reply_markup)
-
-    
-       
-    
-        
-        
-
-
-
-
-
-
-
-
+    elif state == 'set_jira_oncalls_username':
+        selected_user_id = get_user_state_message(user_id)
+        set_jira_oncalls_username_in_db(selected_user_id, message)
+        keyboard = [
+            [InlineKeyboardButton("بازگشت به لیست آنکال", callback_data="show_oncall_list")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        update.message.reply_text('یوزنیم جیرا با موفقیت برای کاربر ثبت شد',reply_markup=reply_markup)
 
 
 def back_to_start(update: Update, context: CallbackContext) -> None:
     update.callback_query.answer()
     start(update, context)
 
-
 def start(update: Update, context: CallbackContext):
     query = None
     user_id = get_user_id(update)
+    username = update.effective_user.username
+    name = update.effective_user.first_name
+
+    if is_first_time_user(user_id):
+        add_first_time_user(user_id, username, name)
+        oncall_group_id = get_oncall_group_id()
+        if oncall_group_id:
+            context.bot.send_message(chat_id=oncall_group_id,text=(f"👤 کاربر: {name}\n🆔 آیدی: {user_id}\n📱 نام کاربری: @{username}\n🎉 کاربر برای اولین بار ربات را استارت زد!"))
     if update.callback_query:
         query = update.callback_query
 
@@ -728,7 +834,7 @@ def start(update: Update, context: CallbackContext):
     ]
 
     bot_owner_id = get_bot_owner_id()
-    if update.effective_user.id == int(bot_owner_id) or int(is_oncall_staff(user_id)):
+    if update.effective_user.id == int(bot_owner_id) or int(is_oncall_staff(user_id)) or int(is_bot_manager(user_id)):
         keyboard.append([InlineKeyboardButton("⚙️ پنل مدیریت ربات", callback_data='admin_panel')])
 
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -737,7 +843,7 @@ def start(update: Update, context: CallbackContext):
     else:
         context.bot.send_message(chat_id=user_id, text='👋 سلام! برای ارسال درخواست، لطفاً روی گزینه "تیکت جدید" کلیک کنید. 😊', parse_mode="HTML", reply_markup=reply_markup)
 
-    logger.info(f"User {user_id} started the bot.")
+
 
 
 def main():
