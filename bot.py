@@ -763,8 +763,9 @@ def handle_message(update: Update, context: CallbackContext) -> None:
 
             keyboard = [[InlineKeyboardButton("👁️ مشاهده نشده ⏱", callback_data=f"message_has_been_seen_{message_id}")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            jira_base_url, _, _, _, _ = get_jira_credentials()
+            
             if jira_issue_key != None:
+                jira_base_url, _, _, _, _ = get_jira_credentials()
                 jira_issue_link = f"{jira_base_url}/browse/{jira_issue_key}"
                 context.bot.send_message(chat_id=str(oncall_group_id), text=f"📩 تیکت جدید\n\n👤 کاربر: @{username}\n\n🗓️ تاریخ: {persian_now}\n\n💬 شرح پیام: \n{message} \n\nلینک جیرا: {jira_issue_link}\n\n🔔 جهت اطلاع  \n\nنفر آنکال : {mention}\n🔸", reply_markup=reply_markup)
             else:
