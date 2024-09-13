@@ -11,7 +11,8 @@ from database import (
     mark_message_as_seen, update_user_state, get_user_state, get_api_token, add_oncall_staff, get_bot_owner_id, set_schedule_setting, get_schedule_setting, 
     add_oncall_history, check_date_exists, get_oncall_history_in_range, get_jira_credentials, set_jira_status, set_jira_base_url, set_jira_username,
     set_jira_password, set_jira_project_key, add_new_watcher_admin, get_watcher_list, remove_watcher_admins, is_bot_manager, set_jira_oncalls_username_in_db,
-    get_user_state_message, get_oncall_user_name, is_first_time_user, add_first_time_user, get_jira_issue_key_from_message,set_oncall_group_id
+    get_user_state_message, get_oncall_user_name, is_first_time_user, add_first_time_user, get_jira_issue_key_from_message,set_oncall_group_id,
+    restart_container
 )
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, CallbackQueryHandler
@@ -130,7 +131,7 @@ def change_oncall_group_id(query):
         [InlineKeyboardButton("منصرف شدم", callback_data='bot_setting')],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    query.edit_message_text(f"لطفا آیدی گروه آنکال رو وارد کنید گروه آیدی با - شروع میشود\n\n*آیدی فعلی : {oncall_group_id}*\n📍", reply_markup=reply_markup, parse_mode='Markdown')
+    query.edit_message_text(f"لطفا آیدی گروه آنکال رو وارد کنید گروه آیدی با - شروع میشود\n\n*آیدی فعلی : {oncall_group_id}*\n\nبعد از تغییر آیدی ربات ده ثانیه ریسارت میشود\n📍", reply_markup=reply_markup, parse_mode='Markdown')
 
 def bot_setting(query):
     user_id = get_user_id(query)
@@ -849,7 +850,8 @@ def handle_message(update: Update, context: CallbackContext) -> None:
         keyboard = [
             [InlineKeyboardButton("بازگشت به تنظیمات", callback_data="bot_setting")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        update.message.reply_text('آیدی گروه با موفقیت ثبت شد',reply_markup=reply_markup)
+        update.message.reply_text('آیدی گروه با موفقیت ثبت شد لطفا برای ریستارت سرویس چند لحظه صبر کنید',reply_markup=reply_markup)
+        restart_container('devops_oncall_bot')
 
 
 

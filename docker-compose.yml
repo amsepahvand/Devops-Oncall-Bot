@@ -5,5 +5,6 @@ services:
     build: .
     volumes:
       - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: always
     container_name: devops_oncall_bot

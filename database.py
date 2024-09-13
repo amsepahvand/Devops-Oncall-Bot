@@ -486,7 +486,6 @@ def set_oncall_group_id(group_id):
     
     if exists:
         c.execute('UPDATE oncall_group SET group_id = ? WHERE group_id IS NOT NULL', (group_id,))
-        restart_container('devops_oncall_bot')
     else:
         logging.warning("No existing group_id found to update.")
     
