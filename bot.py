@@ -208,7 +208,7 @@ def set_or_change_jira_project_key(update):
         update_user_state(user_id, 'change_jira_project_key')
     else:
         update_user_state(user_id, 'import_jira_project_key')
-    update.message.reply_text('لطفا PROJECT KEY  را وارد کنید ، PROJECT KEY رو میتونید از داخل URL پروژه دربیاریددر واقع همون کلمه قبل از شماره ایشو های پروژه جیرا است')
+    update.message.reply_text('لطفا PROJECT KEY  را وارد کنید ، PROJECT KEY رو میتونید از داخل URL پروژه دربیارید ، در واقع همون کلمه قبل از شماره ایشو های پروژه جیرا است و همچنین به بزرگی و کوچکی حروف حساس است ')
 
 
 def change_jira_credential(query):
