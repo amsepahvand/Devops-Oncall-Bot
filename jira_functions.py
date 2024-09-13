@@ -38,6 +38,50 @@ def create_jira_issue(summary, description):
             logger.error(f"Jira response: {e.response.text}")
         return None
     
+def assign_issue_to_user(jira_username, jira_issue_key):
+    jira_data = get_jira_credentials() 
+    if not jira_data:
+        logger.error("Jira credentials not found.")
+        return None
+
+    jira_base_url, username, password, send_to_jira, project_key = jira_data
+
+    options = {'server': jira_base_url, 'verify': False}
+    jira = JIRA(options=options, basic_auth=(username, password))
+
+    try:
+        issue = jira.issue(jira_issue_key)
+        jira.assign_issue(issue ,jira_username)
+        logger.info(f"Issue {jira_issue_key} assigned to {jira_username}.")
+        return "ok"
+    except Exception as e:
+        logger.error(f"Failed to assign issue {jira_issue_key} to {jira_username}: {e}")
+        if hasattr(e, 'response') and e.response:
+            logger.error(f"Jira response: {e.response.text}")
+        return "error"
+    
+def get_jira_issue_status(issue_key):
+    jira_data = get_jira_credentials() 
+    if not jira_data:
+        logger.error("Jira credentials not found.")
+        return None
+
+    jira_base_url, username, password, send_to_jira, project_key = jira_data
+
+    options = {'server': jira_base_url, 'verify': False}
+    jira = JIRA(options=options, basic_auth=(username, password))
+
+    try:
+        issue = jira.issue(issue_key)
+        status = issue.fields.status.name
+        logger.info(f"Issue {issue_key} status: {status}")
+        return status
+    except Exception as e:
+        logger.error(f"Failed to retrieve status for issue {issue_key}: {e}")
+        if hasattr(e, 'response') and e.response:
+            logger.error(f"Jira response: {e.response.text}")
+        return None
+    
 def create_test_issue():
     summary = "Test Issue"
     description = "This is a test issue created for validation."
@@ -50,6 +94,3 @@ def create_test_issue():
     else:
         logger.error("Failed to create test issue.")
         return "error"
-
-
-
