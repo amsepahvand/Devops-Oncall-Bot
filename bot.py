@@ -146,7 +146,7 @@ def about_bot(query):
     keyboard = [
         [InlineKeyboardButton("قابلیت های ربات 🪩", callback_data='bot_features')],
         [InlineKeyboardButton("آموزش های ربات 📚", callback_data='bot_guide')],
-        [InlineKeyboardButton("بازگشت 🔙", callback_data='jira_setting')]
+        [InlineKeyboardButton("بازگشت 🔙", callback_data='admin_panel')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
