@@ -716,7 +716,7 @@ def show_admin_panel(query):
         [InlineKeyboardButton("👥 مشاهده لیست نفرات", callback_data='show_oncall_list')],
         [InlineKeyboardButton("📋 تنظیمات و زمانبندی OnCall", callback_data='schedule_setting')],
         [InlineKeyboardButton("🌀 تنظیمات ارسال تیکت به جیرا", callback_data='jira_setting')],
-        [InlineKeyboardButton("⚙ تنظیمات ربات", callback_data='bot_setting')],
+        [InlineKeyboardButton("🛠 تنظیمات ربات", callback_data='bot_setting')],
         [InlineKeyboardButton("🤖 درباره ربات", callback_data='about_bot')],
         [InlineKeyboardButton("🔙 بازگشت به منو اصلی", callback_data='main_menu')]
     ]
