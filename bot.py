@@ -708,7 +708,7 @@ def show_oncall_list(query):
     buttons.append([InlineKeyboardButton("👥 مشاهده مدیران ربات ", callback_data="show_bot_admins")])
     buttons.append([InlineKeyboardButton("🔙 بازگشت به پنل مدیریت", callback_data="admin_panel")])
     reply_markup = InlineKeyboardMarkup(buttons)
-    query.edit_message_text(text="📋 لیست افراد آنکال \n میتونید برای اتواساین تیکت های جیرا روی username جیرا هر نفر کلیک کنید و بصورت دستی واردش کنید\n📍:", reply_markup=reply_markup)
+    query.edit_message_text(text="📋 لیست افراد آنکال \n میتونید برای اتواساین تیکت های جیرا روی username جیرا هر نفر کلیک کنید و بصورت دستی واردش کنید:\n📍", reply_markup=reply_markup)
 
 
 def show_admin_panel(query):
@@ -825,7 +825,7 @@ def handle_message(update: Update, context: CallbackContext) -> None:
         set_or_change_jira_project_key(update)
     elif state == 'import_jira_project_key':
         set_jira_project_key(message)
-        update.message.reply_text(f'Base URL  :  {message}',reply_markup=None)
+        update.message.reply_text(f'Project Key  :  {message}',reply_markup=None)
 
         connection_status = create_test_issue()
         if connection_status == 'error':
