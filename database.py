@@ -503,10 +503,3 @@ def set_oncall_group_id(group_id):
 
 
 create_db()
-
-
-
-
-
-
-#    logger.info(f"Test issue created successfully: {result}")
