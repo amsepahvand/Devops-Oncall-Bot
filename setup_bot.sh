@@ -74,7 +74,8 @@ CREATE TABLE IF NOT EXISTS oncall_staff (
     user_id INTEGER PRIMARY KEY,
     name TEXT,
     username TEXT,
-    jira_username TEXT DEFAULT None
+    jira_username TEXT DEFAULT None,
+    phone_number TEXT DEFAULT None
 );
 
 CREATE TABLE IF NOT EXISTS user_state (

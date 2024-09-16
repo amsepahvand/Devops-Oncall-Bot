@@ -12,7 +12,7 @@ from database import (
     add_oncall_history, check_date_exists, get_oncall_history_in_range, get_jira_credentials, set_jira_status, set_jira_base_url, set_jira_username,
     set_jira_password, set_jira_project_key, add_new_watcher_admin, get_watcher_list, remove_watcher_admins, is_bot_manager, set_jira_oncalls_username_in_db,
     get_user_state_message, get_oncall_user_name, is_first_time_user, add_first_time_user, get_jira_issue_key_from_message,set_oncall_group_id,
-    restart_container
+    restart_container, set_oncalls_phone_number_in_db
 )
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, CallbackQueryHandler
@@ -111,6 +111,8 @@ def button_handler(update, context) :
         jira_test_connection(update, context)
     elif query.data.startswith('jira_username_'):
         set_jira_oncalls_username(query)
+    elif query.data.startswith('phone_number_'):
+        set_oncalls_phone_number(query)
     elif query.data == ('bot_setting'):
         bot_setting(query)
     elif query.data == ('change_oncall_group_id'):
@@ -159,6 +161,11 @@ def about_bot(query):
     )    
     query.edit_message_text(message, reply_markup=reply_markup, parse_mode='Markdown')
 
+def set_oncalls_phone_number(query):
+    selected_user_id = query.data.split('_')[-1]
+    user_id = get_user_id(query)
+    update_user_state(user_id,'set_oncalls_phone_number',f'{selected_user_id}')
+    query.edit_message_text('لطفا شماره همراه شخص مورد نظرتون رو با پیش شماره +98 و بدون صفر وارد کنید\n\n مثلا :+989122222222 \n و برای پاک کردن عبارت None را وارد کنید\n☎', reply_markup = None)
 
 def set_jira_oncalls_username(query):
     selected_user_id = query.data.split('_')[-1]
@@ -255,7 +262,7 @@ def show_jira_setting(query):
                     [InlineKeyboardButton("بازگشت به منو قبلی", callback_data='admin_panel')]
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
-                query.edit_message_text("وضعیت فعلی: تیکت‌ها به جیرا ارسال می‌شوند ✅.", reply_markup=reply_markup)
+                query.edit_message_text("وضعیت فعلی: تیکت‌ها به جیرا ارسال می‌شوند ✅", reply_markup=reply_markup)
             else:
                 keyboard = [
                     [InlineKeyboardButton("تغییر وضعیت به ساخت تیکت در جیرا", callback_data='change_jira_status_to_1')],
@@ -263,7 +270,7 @@ def show_jira_setting(query):
                     [InlineKeyboardButton("بازگشت به منو قبلی 🔙", callback_data='admin_panel')]
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
-                query.edit_message_text("وضعیت فعلی: تیکت‌ها به جیرا ارسال نمی‌شوند ⛔.", reply_markup=reply_markup)
+                query.edit_message_text("وضعیت فعلی: تیکت‌ها به جیرا ارسال نمی‌شوند ⛔", reply_markup=reply_markup)
         else:
             update_user_state(user_id,'import_jira_data')
             keyboard = [
@@ -693,14 +700,17 @@ def show_oncall_list(query):
     buttons.append([
         InlineKeyboardButton("Oncall Name", callback_data="no_action"),
         InlineKeyboardButton("Username", callback_data="no_action"),
-        InlineKeyboardButton("Jira Username", callback_data="no_action")
+        InlineKeyboardButton("Jira Username", callback_data="no_action"),
+        InlineKeyboardButton("Phone", callback_data="no_action")
+
     ])
 
-    for user_id, name, username, jira_username in records:
+    for user_id, name, username, jira_username, phone_number in records:
         row = [
             InlineKeyboardButton(f"{name}", callback_data=f"staff_name_{user_id}"),
             InlineKeyboardButton(f"@{username}", url=f"https://t.me/{username}"),
-            InlineKeyboardButton(f"{jira_username}", callback_data=f"jira_username_{user_id}")
+            InlineKeyboardButton(f"{jira_username}", callback_data=f"jira_username_{user_id}"),
+            InlineKeyboardButton(f"{phone_number}", callback_data=f"phone_number_{user_id}")
         ]
         buttons.append(row)
     buttons.append([InlineKeyboardButton("🔷 اضافه کردن افراد جدید ", callback_data="add_new_oncall")])
@@ -724,6 +734,17 @@ def show_admin_panel(query):
     query.edit_message_text(text='⚙️ پنل ادمین ربات، اینجا می‌توانید نفرات را ببینید یا اضافه/حذف کنید و یا اینکه لیست آنکال یک ماه آینده را بسازید:', parse_mode="HTML", reply_markup=reply_markup)
 
 
+def construct_reply_text(oncall_name, mention, jira_issue_key, oncall_phone_number):
+    base_text = f'✅ تیکت شما با موفقیت ثبت شد و [{oncall_name}](https://t.me/{mention}) مسئول رسیدگی به آن می‌باشد.\n'
+    
+    if jira_issue_key :
+        base_text += f'\n 🔰 شماره تیکت : {jira_issue_key}\n👨‍💻 همکاران ما در سریع‌ترین زمان ممکن با شما ارتباط برقرار می‌کنند\n\n'
+    else:
+        base_text += '👨‍💻 همکاران ما در سریع‌ترین زمان ممکن با شما ارتباط برقرار می‌کنند \n'
+    
+    if oncall_phone_number != 'None' and oncall_phone_number != 'none':
+        base_text += f'\n 📞 شماره تماس اضطراری : {oncall_phone_number}\n🚨'
+    return base_text
 
 
 def handle_message(update: Update, context: CallbackContext) -> None:
@@ -748,8 +769,8 @@ def handle_message(update: Update, context: CallbackContext) -> None:
 
         oncall_staff = get_oncall_list()
         if oncall_staff:
-            oncall_user_id, oncall_name, oncall_username, oncall_jira_username = oncall_staff[0]
-            mention = f"@{oncall_username}"
+            oncall_user_id, oncall_name, oncall_username, oncall_jira_username, oncall_phone_number = oncall_staff[0]
+            mention = f"{oncall_username}"
 
             jira_data = get_jira_credentials()
             send_to_jira = jira_data[3] if jira_data else 1
@@ -775,11 +796,9 @@ def handle_message(update: Update, context: CallbackContext) -> None:
                 [InlineKeyboardButton("🔄 شروع مجدد", callback_data="restart_bot")]
             ]
             restart_reply_markup = InlineKeyboardMarkup(restart_keyboard)
-            if jira_issue_key != None:
-                update.message.reply_text(f'✅ تیکت شما با موفقیت ثبت شد و {mention} مسئول رسیدگی به آن می‌باشد.\n\n شماره تیکت : {jira_issue_key}\nدر سریع‌ترین زمان ممکن با شما ارتباط برقرار می‌کنند 🎉',reply_markup=restart_reply_markup)
-            else:
-                update.message.reply_text(f'✅ تیکت شما با موفقیت ثبت شد و {mention} مسئول رسیدگی به آن می‌باشد.\nدر سریع‌ترین زمان ممکن با شما ارتباط برقرار می‌کنند 🎉',reply_markup=restart_reply_markup)
- 
+            reply_text = construct_reply_text(oncall_name, mention, jira_issue_key, oncall_phone_number)
+            update.message.reply_text(reply_text, reply_markup=restart_reply_markup, parse_mode='Markdown')
+
         else:
             context.bot.send_message(chat_id=str(oncall_group_id), text=f"تنظیمات ربات اعم از نفرات آنکال یا زمانبندی آنکال به درستی اعمال نشده ، فراموش نکنید بعد از وارد کردن این موارد باید یک لیست هم بسازید", reply_markup=None)
             restart_keyboard = [
@@ -846,6 +865,14 @@ def handle_message(update: Update, context: CallbackContext) -> None:
             [InlineKeyboardButton("بازگشت به لیست آنکال", callback_data="show_oncall_list")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         update.message.reply_text('یوزنیم جیرا با موفقیت برای کاربر ثبت شد',reply_markup=reply_markup)
+    elif state == 'set_oncalls_phone_number':
+        selected_user_id = get_user_state_message(user_id)
+        set_oncalls_phone_number_in_db(selected_user_id, message)
+        keyboard = [
+            [InlineKeyboardButton("بازگشت به لیست آنکال", callback_data="show_oncall_list")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        update.message.reply_text('شماره تماس با موفقیت برای کاربر ثبت شد',reply_markup=reply_markup)
+
     elif state == 'change_oncall_group_id':
         set_oncall_group_id(message)
         keyboard = [

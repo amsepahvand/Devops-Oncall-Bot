@@ -47,7 +47,8 @@ def create_db():
                 user_id INTEGER PRIMARY KEY,
                 name TEXT,
                 username TEXT,
-                jira_username TXT DEFAULT None
+                jira_username TXT DEFAULT None,
+                phone_number TEXT DEFAULT None
             )
         ''')
         c.execute('''
@@ -125,6 +126,14 @@ def set_jira_oncalls_username_in_db(user_id, jira_username):
     conn.commit()
     conn.close()
 
+def set_oncalls_phone_number_in_db(user_id, phone_number):
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+    c.execute('UPDATE oncall_staff SET phone_number = ? WHERE user_id = ?', (phone_number, user_id))
+    conn.commit()
+    conn.close()
+
+
 def set_api_token(token):
     conn = sqlite3.connect('bot-db.db')
     c = conn.cursor()
@@ -181,7 +190,7 @@ def get_watcher_list():
 def get_oncall_list():
     conn = sqlite3.connect('bot-db.db')
     c = conn.cursor()
-    c.execute('SELECT user_id, name, username, jira_username FROM oncall_staff')
+    c.execute('SELECT user_id, name, username, jira_username, phone_number FROM oncall_staff')
     staff = c.fetchall()
     conn.close()
     return staff
