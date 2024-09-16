@@ -788,7 +788,7 @@ def handle_message(update: Update, context: CallbackContext) -> None:
             if jira_issue_key != None:
                 jira_base_url, _, _, _, _ = get_jira_credentials()
                 jira_issue_link = f"{jira_base_url}/browse/{jira_issue_key}"
-                context.bot.send_message(chat_id=str(oncall_group_id), text=f"📩 تیکت جدید\n\n👤 کاربر: @{username}\n\n🗓️ تاریخ: {persian_now}\n\n💬 شرح پیام: \n{message} \n\nلینک جیرا: {jira_issue_link}\n\n🔔 جهت اطلاع  \n\nنفر آنکال : {mention}\n🔸", reply_markup=reply_markup)
+                context.bot.send_message(chat_id=str(oncall_group_id), text=f"📩 تیکت جدید\n\n👤 کاربر: @{username}\n\n🗓️ تاریخ: {persian_now}\n\n💬 شرح پیام: \n{message} \n\nلینک جیرا: [Jira Link]({jira_issue_link})\n\n🔔 جهت اطلاع  \n\nنفر آنکال : @{mention}\n🔸", reply_markup=reply_markup, parse_mode='Markdown')
             else:
                 context.bot.send_message(chat_id=str(oncall_group_id), text=f"📩 تیکت جدید\n\n👤 کاربر: @{username}\n\n🗓️ تاریخ: {persian_now}\n\n💬 شرح پیام: \n{message} \n\n🔔 جهت اطلاع  \n\nنفر آنکال : {mention}\n🔸", reply_markup=reply_markup)
 
