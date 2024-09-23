@@ -743,14 +743,18 @@ def construct_reply_text(oncall_name, mention, jira_issue_key, oncall_phone_numb
         base_text = f'✅ تیکت شما با موفقیت ثبت شد و [{oncall_name}](https://t.me/{mention}) مسئول رسیدگی به آن می‌باشد.\n'
         
         if jira_issue_key:
-            base_text += f'\n 🔰 شماره تیکت : {jira_issue_key}\n👨‍💻 همکاران ما در سریع‌ترین زمان ممکن با شما ارتباط برقرار می‌کنند\n\n'
+            base_text += f'\n 🔰 شماره تیکت : {jira_issue_key}\n👨‍💻 همکاران ما در سریع‌ترین زمان ممکن با شما ارتباط برقرار می‌کنند\n🔸'
         else:
-            base_text += '👨‍💻 همکاران ما در سریع‌ترین زمان ممکن با شما ارتباط برقرار می‌کنند \n'
+            base_text += '👨‍💻 همکاران ما در سریع‌ترین زمان ممکن با شما ارتباط برقرار می‌کنند \n🔸'
         
         if oncall_phone_number != 'None' and oncall_phone_number != 'none':
             base_text += f'\n 📞 شماره تماس اضطراری : {oncall_phone_number}\n🚨'
     else:
-        base_text = "تیکت شما با موفقیت ثبت شد بزودی همکاران ما با شما ارتباط خواهند گرفت"
+        base_text = "تیکت شما با موفقیت ثبت شد \n"
+        if jira_issue_key:
+            base_text += f'\n 🔰 شماره تیکت : {jira_issue_key}\n👨‍💻 همکاران ما در سریع‌ترین زمان ممکن با شما ارتباط برقرار می‌کنند\n🔸'
+        else:
+            base_text += '👨‍💻 همکاران ما در سریع‌ترین زمان ممکن با شما ارتباط برقرار می‌کنند \n🔸'
 
     return base_text
 
@@ -790,16 +794,30 @@ def handle_message(update: Update, context: CallbackContext) -> None:
 
             message_id = store_message(user_id, username, message, assignie=oncall_username, status='None', jira_issue_key=jira_issue_key)
 
-            keyboard = [[InlineKeyboardButton("👁️ مشاهده نشده ⏱", callback_data=f"message_has_been_seen_{message_id}")]]
+            keyboard = [[InlineKeyboardButton(" به من اساین کن ⏱", callback_data=f"message_has_been_seen_{message_id}")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            if jira_issue_key != None:
-                jira_base_url, _, _, _, _ = get_jira_credentials()
-                jira_issue_link = f"{jira_base_url}/browse/{jira_issue_key}"
-                context.bot.send_message(chat_id=str(oncall_group_id),text=f"📩 تیکت جدید\n\n👤 کاربر: @{username}\n\n🗓️ تاریخ: {persian_now}\n\n💬 شرح پیام: \n{message} \n\nلینک جیرا: {jira_issue_link if jira_issue_link else 'N/A'}\n\n🔔 جهت اطلاع  \n\nنفر آنکال : @{mention}\n🔸",reply_markup=reply_markup
 
+            tehran_tz = pytz.timezone('Asia/Tehran')
+            current_time = datetime.now(tehran_tz)
+            current_hour = current_time.hour
+
+            if current_hour >= 18 or current_hour < 8:
+            
+                if jira_issue_key != None:
+                    jira_base_url, _, _, _, _ = get_jira_credentials()
+                    jira_issue_link = f"{jira_base_url}/browse/{jira_issue_key}"
+                    context.bot.send_message(chat_id=str(oncall_group_id),text=f"📩 تیکت جدید\n\n👤 کاربر: @{username}\n\n🗓️ تاریخ: {persian_now}\n\n💬 شرح پیام: \n{message} \n\nلینک جیرا: {jira_issue_link if jira_issue_link else 'N/A'}\n\n🔔 جهت اطلاع  \n\nنفر آنکال : @{mention}\n🔸",reply_markup=reply_markup)
+
+                else:
+                    context.bot.send_message(chat_id=str(oncall_group_id), text=f"📩 تیکت جدید\n\n👤 کاربر: @{username}\n\n🗓️ تاریخ: {persian_now}\n\n💬 شرح پیام: \n{message} \n\n🔔 جهت اطلاع  \n\nنفر آنکال : {mention}\n🔸", reply_markup=reply_markup)
             else:
-                context.bot.send_message(chat_id=str(oncall_group_id), text=f"📩 تیکت جدید\n\n👤 کاربر: @{username}\n\n🗓️ تاریخ: {persian_now}\n\n💬 شرح پیام: \n{message} \n\n🔔 جهت اطلاع  \n\nنفر آنکال : {mention}\n🔸", reply_markup=reply_markup)
+                if jira_issue_key != None:
+                    jira_base_url, _, _, _, _ = get_jira_credentials()
+                    jira_issue_link = f"{jira_base_url}/browse/{jira_issue_key}"
+                    context.bot.send_message(chat_id=str(oncall_group_id),text=f"📩 تیکت جدید\n\n👤 کاربر: @{username}\n\n🗓️ تاریخ: {persian_now}\n\n💬 شرح پیام: \n{message} \n\nلینک جیرا: {jira_issue_link if jira_issue_link else 'N/A'}\n🔸",reply_markup=reply_markup)
+
+                else:
+                    context.bot.send_message(chat_id=str(oncall_group_id), text=f"📩 تیکت جدید\n\n👤 کاربر: @{username}\n\n🗓️ تاریخ: {persian_now}\n\n💬 شرح پیام: \n{message} \n🔸", reply_markup=reply_markup)
 
             restart_keyboard = [
                 [InlineKeyboardButton("🔄 شروع مجدد", callback_data="restart_bot")]
