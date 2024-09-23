@@ -735,15 +735,11 @@ def show_admin_panel(query):
 
 
 def construct_reply_text(oncall_name, mention, jira_issue_key, oncall_phone_number):
-    # Define Tehran timezone
     tehran_tz = pytz.timezone('Asia/Tehran')
-    # Get current time in Tehran timezone
     current_time = datetime.now(tehran_tz)
     current_hour = current_time.hour
 
-    # Check if current time is between 6 PM and 8 AM
     if current_hour >= 18 or current_hour < 8:
-        # Time is between 6 PM and 8 AM
         base_text = f'✅ تیکت شما با موفقیت ثبت شد و [{oncall_name}](https://t.me/{mention}) مسئول رسیدگی به آن می‌باشد.\n'
         
         if jira_issue_key:
@@ -754,7 +750,6 @@ def construct_reply_text(oncall_name, mention, jira_issue_key, oncall_phone_numb
         if oncall_phone_number != 'None' and oncall_phone_number != 'none':
             base_text += f'\n 📞 شماره تماس اضطراری : {oncall_phone_number}\n🚨'
     else:
-        # Time is not between 6 PM and 8 AM
         base_text = "تیکت شما با موفقیت ثبت شد بزودی همکاران ما با شما ارتباط خواهند گرفت"
 
     return base_text
