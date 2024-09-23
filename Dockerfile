@@ -1,6 +1,4 @@
-FROM python:3.8-slim
-
-RUN apt-get update && apt-get install -y && rm -rf /var/lib/apt/lists/*
+FROM python:3.9
 
 WORKDIR /app
 
