@@ -735,15 +735,28 @@ def show_admin_panel(query):
 
 
 def construct_reply_text(oncall_name, mention, jira_issue_key, oncall_phone_number):
-    base_text = f'✅ تیکت شما با موفقیت ثبت شد و [{oncall_name}](https://t.me/{mention}) مسئول رسیدگی به آن می‌باشد.\n'
-    
-    if jira_issue_key :
-        base_text += f'\n 🔰 شماره تیکت : {jira_issue_key}\n👨‍💻 همکاران ما در سریع‌ترین زمان ممکن با شما ارتباط برقرار می‌کنند\n\n'
+    # Define Tehran timezone
+    tehran_tz = pytz.timezone('Asia/Tehran')
+    # Get current time in Tehran timezone
+    current_time = datetime.now(tehran_tz)
+    current_hour = current_time.hour
+
+    # Check if current time is between 6 PM and 8 AM
+    if current_hour >= 18 or current_hour < 8:
+        # Time is between 6 PM and 8 AM
+        base_text = f'✅ تیکت شما با موفقیت ثبت شد و [{oncall_name}](https://t.me/{mention}) مسئول رسیدگی به آن می‌باشد.\n'
+        
+        if jira_issue_key:
+            base_text += f'\n 🔰 شماره تیکت : {jira_issue_key}\n👨‍💻 همکاران ما در سریع‌ترین زمان ممکن با شما ارتباط برقرار می‌کنند\n\n'
+        else:
+            base_text += '👨‍💻 همکاران ما در سریع‌ترین زمان ممکن با شما ارتباط برقرار می‌کنند \n'
+        
+        if oncall_phone_number != 'None' and oncall_phone_number != 'none':
+            base_text += f'\n 📞 شماره تماس اضطراری : {oncall_phone_number}\n🚨'
     else:
-        base_text += '👨‍💻 همکاران ما در سریع‌ترین زمان ممکن با شما ارتباط برقرار می‌کنند \n'
-    
-    if oncall_phone_number != 'None' and oncall_phone_number != 'none':
-        base_text += f'\n 📞 شماره تماس اضطراری : {oncall_phone_number}\n🚨'
+        # Time is not between 6 PM and 8 AM
+        base_text = "تیکت شما با موفقیت ثبت شد بزودی همکاران ما با شما ارتباط خواهند گرفت"
+
     return base_text
 
 
@@ -788,7 +801,8 @@ def handle_message(update: Update, context: CallbackContext) -> None:
             if jira_issue_key != None:
                 jira_base_url, _, _, _, _ = get_jira_credentials()
                 jira_issue_link = f"{jira_base_url}/browse/{jira_issue_key}"
-                context.bot.send_message(chat_id=str(oncall_group_id), text=f"📩 تیکت جدید\n\n👤 کاربر: @{username}\n\n🗓️ تاریخ: {persian_now}\n\n💬 شرح پیام: \n{message} \n\nلینک جیرا: [Jira Link]({jira_issue_link})\n\n🔔 جهت اطلاع  \n\nنفر آنکال : @{mention}\n🔸", reply_markup=reply_markup, parse_mode='Markdown')
+                context.bot.send_message(chat_id=str(oncall_group_id),text=f"📩 تیکت جدید\n\n👤 کاربر: @{username}\n\n🗓️ تاریخ: {persian_now}\n\n💬 شرح پیام: \n{message} \n\nلینک جیرا: {jira_issue_link if jira_issue_link else 'N/A'}\n\n🔔 جهت اطلاع  \n\nنفر آنکال : @{mention}\n🔸",reply_markup=reply_markup
+
             else:
                 context.bot.send_message(chat_id=str(oncall_group_id), text=f"📩 تیکت جدید\n\n👤 کاربر: @{username}\n\n🗓️ تاریخ: {persian_now}\n\n💬 شرح پیام: \n{message} \n\n🔔 جهت اطلاع  \n\nنفر آنکال : {mention}\n🔸", reply_markup=reply_markup)
 
