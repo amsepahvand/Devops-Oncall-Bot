@@ -944,6 +944,19 @@ def start(update: Update, context: CallbackContext):
         context.bot.send_message(chat_id=user_id, text='👋 سلام! برای ارسال درخواست، لطفاً روی گزینه "تیکت جدید" کلیک کنید. 😊', parse_mode="HTML", reply_markup=reply_markup)
 
 
+def oncall(update: Update , context: CallbackContext):
+    oncall_staff = get_oncall_list()
+    if oncall_staff:
+        oncall_user_id, oncall_name, oncall_username, oncall_jira_username, oncall_phone_number = oncall_staff[0]
+        oncall_person = f"{oncall_username}"
+    
+    if oncall_person:
+        name, username =oncall_name, oncall_username
+        message = f"👤 آنکال امروز :  {name}\n\n نام کاربری : @{username} \n\n🔸 "
+    else:
+        message = f"❌ فرد آنکال برای امروز مشخص نشده است."
+    update.message.reply_text(message)
+
 
 
 def main():
@@ -961,6 +974,7 @@ def main():
     dp.add_handler(CallbackQueryHandler(button_handler))
     dp.add_handler(MessageHandler(Filters.forwarded, handle_forwarded_message))
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+    updater.dispatcher.add_handler(CommandHandler('oncall', oncall))
 
 
     updater.start_polling()
