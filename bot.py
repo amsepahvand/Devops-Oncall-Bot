@@ -952,7 +952,7 @@ def oncall(update: Update , context: CallbackContext):
     
     if oncall_person:
         name, username =oncall_name, oncall_username
-        message = f"👤 آنکال امروز :  {name}\n\n نام کاربری : @{username} \n\n🔸 "
+        message = f"👨‍💻 آنکال امروز :  {name}\n\n👤 نام کاربری : @{username} \n\n توجه کنید فرد آنکال فقط در ساعات ۶ بعد از ظهر تا ۸ صبح و ایام تعطیل فعالیت دارد.\n\n🔸 "
     else:
         message = f"❌ فرد آنکال برای امروز مشخص نشده است."
     update.message.reply_text(message)
