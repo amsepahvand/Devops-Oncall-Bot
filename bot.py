@@ -861,6 +861,7 @@ def handle_message(update: Update, context: CallbackContext) -> None:
                 [InlineKeyboardButton("🔄 شروع مجدد", callback_data="restart_bot")]]
             restart_reply_markup = InlineKeyboardMarkup(restart_keyboard)
             update.message.reply_text('در حال حاضر ربات آماده به کار نیست لطفا با پشتیبانی تماس بگیرید',reply_markup=restart_reply_markup)
+        update_user_state(user_id, "None")
     elif state == 'change_jira_base_url':
         set_jira_base_url(message)
         keyboard = [
