@@ -2,7 +2,7 @@ import os
 import sys
 import sqlite3
 import jdatetime
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 import logging
 import docker
@@ -133,6 +133,14 @@ def set_oncalls_phone_number_in_db(user_id, phone_number):
     conn.commit()
     conn.close()
 
+def get_oncall_phone_number(oncall_username):
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+    c.execute('select phone_number from oncall_staff WHERE username = ?', (oncall_username,))
+    result = c.fetchone()
+    conn.close()
+    return result[0] if result else None
+
 
 def set_api_token(token):
     conn = sqlite3.connect('bot-db.db')
@@ -191,6 +199,21 @@ def get_oncall_list():
     conn = sqlite3.connect('bot-db.db')
     c = conn.cursor()
     c.execute('SELECT user_id, name, username, jira_username, phone_number FROM oncall_staff')
+    staff = c.fetchall()
+    conn.close()
+    return staff
+
+def get_oncall_person():
+    tehran_tz = pytz.timezone('Asia/Tehran')
+    current_date = datetime.now(tehran_tz)
+    jalali_date = jdatetime.datetime.fromgregorian(
+        year=current_date.year,
+        month=current_date.month,
+        day=current_date.day
+    ).strftime('%Y/%m/%d')
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+    c.execute('SELECT name, username FROM oncall_history WHERE date = ?', (jalali_date,))
     staff = c.fetchall()
     conn.close()
     return staff
@@ -332,7 +355,7 @@ def mark_message_as_seen(message_id):
     conn.close()
 
 
-def store_message(user_id, username, message, assignie=None, status='not reported', jira_issue_key=None):
+def store_message(user_id, username, message, status='not reported', jira_issue_key=None):
     conn = sqlite3.connect('bot-db.db')
     c = conn.cursor()
     
@@ -349,14 +372,24 @@ def store_message(user_id, username, message, assignie=None, status='not reporte
     
     created_date = tehran_time.strftime('%Y-%m-%d %H:%M:%S')
 
-    c.execute('INSERT INTO user_messages (user_id, username, message, persian_date, created_date, assignie, status, jira_issue_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
-              (user_id, username, message, persian_date, created_date, assignie, status, jira_issue_key))
+    c.execute('INSERT INTO user_messages (user_id, username, message, persian_date, created_date, status, jira_issue_key) VALUES (?, ?, ?, ?, ?, ?, ?)', 
+              (user_id, username, message, persian_date, created_date, status, jira_issue_key))
 
     message_id = c.lastrowid
     conn.commit()
     conn.close()
     
     return message_id
+
+def get_last_oncall_person_for_last_month():    
+    conn = sqlite3.connect('bot-db.db')
+    c = conn.cursor()
+    c.execute('SELECT username FROM oncall_history ORDER BY date DESC LIMIT 1')
+    result = c.fetchone()
+    conn.close()
+    
+    return result[0] if result else None
+
 
 def is_oncall_staff(user_id):
     conn = sqlite3.connect('bot-db.db')
@@ -377,7 +410,7 @@ def is_bot_manager(user_id):
 def get_user_tickets(user_id):
     conn = sqlite3.connect('bot-db.db')
     c = conn.cursor()
-    c.execute('SELECT message_id, message, persian_date, assignie FROM user_messages WHERE user_id = ? ORDER BY created_date DESC LIMIT 10', (user_id,))
+    c.execute('SELECT message_id, message, persian_date FROM user_messages WHERE user_id = ? ORDER BY created_date DESC LIMIT 10', (user_id,))
     tickets = c.fetchall()
     conn.close()
     return tickets
@@ -385,7 +418,7 @@ def get_user_tickets(user_id):
 def get_ticket_details(message_id):
     conn = sqlite3.connect('bot-db.db')
     c = conn.cursor()
-    c.execute('SELECT message, persian_date, assignie, jira_issue_key  FROM user_messages WHERE message_id = ?', (message_id,))
+    c.execute('SELECT message, persian_date, jira_issue_key  FROM user_messages WHERE message_id = ?', (message_id,))
     ticket = c.fetchone()
     conn.close()
     return ticket

@@ -5,14 +5,14 @@ import emoji
 import pytz
 import jdatetime
 from docs import bot_guide, bot_features
-from jira_functions import create_jira_issue, create_test_issue, get_jira_issue_status, assign_issue_to_user
+from jira_functions import create_jira_issue, create_test_issue, get_jira_issue_status, assign_issue_to_user, transition_issue_to_done
 from database import (
     create_db, store_message, get_oncall_list, get_oncall_group_id, get_user_tickets, get_ticket_details, is_oncall_staff, remove_oncall_staff,
     mark_message_as_seen, update_user_state, get_user_state, get_api_token, add_oncall_staff, get_bot_owner_id, set_schedule_setting, get_schedule_setting, 
     add_oncall_history, check_date_exists, get_oncall_history_in_range, get_jira_credentials, set_jira_status, set_jira_base_url, set_jira_username,
     set_jira_password, set_jira_project_key, add_new_watcher_admin, get_watcher_list, remove_watcher_admins, is_bot_manager, set_jira_oncalls_username_in_db,
     get_user_state_message, get_oncall_user_name, is_first_time_user, add_first_time_user, get_jira_issue_key_from_message,set_oncall_group_id,
-    restart_container, set_oncalls_phone_number_in_db
+    restart_container, set_oncalls_phone_number_in_db, get_oncall_person, get_oncall_phone_number, get_last_oncall_person_for_last_month
 )
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, CallbackQueryHandler
@@ -123,6 +123,8 @@ def button_handler(update, context) :
         bot_guide(update, context)
     elif query.data == ('bot_features'):
         bot_features(update, context)
+    elif query.data.startswith('transition_to_done_'):
+        handle_transition(query)
 
 
 def change_oncall_group_id(query):
@@ -292,12 +294,11 @@ def show_ticket_details(query, message_id):
     ticket = get_ticket_details(message_id)
 
     if ticket:
-        message, persian_date, assignie, jira_issue_key = ticket
+        message, persian_date, jira_issue_key = ticket
         
         details = (
             f"\n📝 پیام: {message}\n\n"
             f"📅 تاریخ: {persian_date}\n\n"
-            f"👤 واگذار شده به: {assignie}\n\n"
         )
         if jira_issue_key:
             details += f"🌀 شماره تیکت جیرا: {jira_issue_key}\n\n"
@@ -320,7 +321,7 @@ def see_my_requests(query):
     tickets = tickets[::-1]
     keyboard = []
     for ticket in tickets:
-        message_id, message, _, _= ticket
+        message_id, message, _= ticket
         short_message = message[:30] + "..." if len(message) > 30 else message
         keyboard.append([InlineKeyboardButton(short_message, callback_data=f'show_ticket_{message_id}')])
     keyboard.append([InlineKeyboardButton("بازگشت به منوی اصلی", callback_data='main_menu')])
@@ -334,11 +335,32 @@ def mark_message_as_seen_in_db(query):
     user_id = query.from_user.id 
     user_name, jira_username = get_oncall_user_name(user_id)
     mark_message_as_seen(message_id)
+    keyboard = [
+            [InlineKeyboardButton(f"✅توسط {user_name} مشاهده شد", callback_data="None")]
+        ]
     if jira_username:
         jira_issue_key = get_jira_issue_key_from_message(message_id)
-        assign_issue_to_user(jira_username, jira_issue_key)
-    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(f"✅توسط {user_name} مشاهده شد", callback_data="None")]])
+        if jira_issue_key:
+            assign_issue_to_user(jira_username, jira_issue_key)
+            keyboard.append([InlineKeyboardButton("انتقال به Done", callback_data=f'transition_to_done_{jira_issue_key}_by_{user_name}')])
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
     query.edit_message_reply_markup(reply_markup=reply_markup)
+
+
+def handle_transition(query):
+    issue_key = query.data.split('_')[-3]
+    transition_issue_to_done(issue_key)
+    first_seen = query.data.split('_')[-1]
+    user_id = query.from_user.id 
+    actor, jira_username = get_oncall_user_name(user_id)
+    keyboard = [
+            [InlineKeyboardButton(f"✅توسط {first_seen} مشاهده شد", callback_data="None")],
+            [InlineKeyboardButton(f"✅توسط {actor} انجام شد", callback_data="None")]
+        ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    query.edit_message_reply_markup(reply_markup=reply_markup)
+
 
 
 def send_schedule_list_to_group(query, context):
@@ -424,7 +446,7 @@ def alert_user_about_exist_list(query, date):
 def generate_oncall_schedule(query , context):
 
     start_date = query.data.split('_')[2]
-
+    last_oncall_person = get_last_oncall_person_for_last_month()
     oncall_persons = get_oncall_list()
     period_setting = get_schedule_setting()
     user_id = get_user_id(query)
@@ -481,6 +503,9 @@ def generate_oncall_schedule(query , context):
         ).strftime('%Y/%m/%d')
         person_index = (day // period_setting) % len(oncall_persons)
         oncall_person = oncall_persons[person_index]
+        if day == 0 and last_oncall_person == oncall_person[2]:
+            person_index = (person_index + 1) % len(oncall_persons)
+            oncall_person = oncall_persons[person_index]
         
         add_oncall_history(oncall_person[1], oncall_person[2], jalali_date)
         user_id = get_user_id(query)
@@ -779,9 +804,10 @@ def handle_message(update: Update, context: CallbackContext) -> None:
             minute=tehran_time.minute
         ).strftime('%Y-%m-%d %H:%M')
 
-        oncall_staff = get_oncall_list()
+        oncall_staff = get_oncall_person()
         if oncall_staff:
-            oncall_user_id, oncall_name, oncall_username, oncall_jira_username, oncall_phone_number = oncall_staff[0]
+            oncall_name, oncall_username = oncall_staff[0]
+            oncall_phone_number = get_oncall_phone_number(oncall_username)
             mention = f"{oncall_username}"
 
             jira_data = get_jira_credentials()
@@ -789,10 +815,13 @@ def handle_message(update: Update, context: CallbackContext) -> None:
 
             jira_issue_key = None
             if send_to_jira == 1:
-                summary = message[:30] 
-                jira_issue_key = create_jira_issue(summary, message) 
+                summary = update.message.text[:30] 
+                message = f"{update.message.text}\n\nRequester Telegram ID : {username}"
+                jira_issue_key = create_jira_issue(summary, message)
+                message = update.message.text
 
-            message_id = store_message(user_id, username, message, assignie=oncall_username, status='None', jira_issue_key=jira_issue_key)
+
+            message_id = store_message(user_id, username, message, status='None', jira_issue_key=jira_issue_key)
 
             keyboard = [[InlineKeyboardButton(" به من اساین کن ⏱", callback_data=f"message_has_been_seen_{message_id}")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -945,9 +974,9 @@ def start(update: Update, context: CallbackContext):
 
 
 def oncall(update: Update , context: CallbackContext):
-    oncall_staff = get_oncall_list()
+    oncall_staff = get_oncall_person()
     if oncall_staff:
-        oncall_user_id, oncall_name, oncall_username, oncall_jira_username, oncall_phone_number = oncall_staff[0]
+        oncall_name, oncall_username = oncall_staff[0]
         oncall_person = f"{oncall_username}"
     
     if oncall_person:

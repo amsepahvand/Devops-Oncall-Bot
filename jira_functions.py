@@ -96,4 +96,37 @@ def create_test_issue():
         return "error"
 
 
+def transition_issue_to_done(issue_key):
+    jira_data = get_jira_credentials() 
+    if not jira_data:
+        logger.error("Jira credentials not found.")
+        return None
 
+    jira_base_url, username, password, send_to_jira, project_key = jira_data
+
+    options = {'server': jira_base_url, 'verify': False}
+    jira = JIRA(options=options, basic_auth=(username, password))
+
+    try:
+        issue = jira.issue(issue_key)
+        
+        transitions = jira.transitions(issue)
+        
+        done_transition_id = None
+        for transition in transitions:
+            if transition['name'] == 'Done':
+                done_transition_id = transition['id']
+                break
+        
+        if done_transition_id:
+            jira.transition_issue(issue, done_transition_id)
+            logger.info(f"Issue {issue_key} transitioned to Done.")
+            return "ok"
+        else:
+            logger.error(f"No transition to Done found for issue {issue_key}.")
+            return "error"
+    except Exception as e:
+        logger.error(f"Failed to transition issue {issue_key} to Done: {e}")
+        if hasattr(e, 'response') and e.response:
+            logger.error(f"Jira response: {e.response.text}")
+        return "error"
