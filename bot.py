@@ -815,7 +815,7 @@ def handle_message(update: Update, context: CallbackContext) -> None:
 
             jira_issue_key = None
             if send_to_jira == 1:
-                summary = update.message.text[:40] 
+                summary = update.message.text[:40].replace('\n', ' ').replace('\r', ' ')
                 message = f"{update.message.text}\n\nRequester Telegram ID : {username}"
                 jira_issue_key = create_jira_issue(summary, message)
                 message = update.message.text
