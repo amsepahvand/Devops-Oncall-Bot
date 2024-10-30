@@ -584,7 +584,7 @@ def delete_oncalls(query, update):
     records = get_oncall_list()
     buttons = []
 
-    for user_id, name, username, jira_username in records:
+    for user_id, name, username, jira_username, phone_number in records:
         row = [
             InlineKeyboardButton(f"{name}", callback_data=f"no_action"), 
             InlineKeyboardButton(f"@{username}", url=f"https://t.me/{username}"),
